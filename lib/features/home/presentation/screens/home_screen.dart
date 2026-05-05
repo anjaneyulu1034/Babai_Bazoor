@@ -1,16 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:babai_bazor_app/core/constants/api_constants.dart';
 import 'package:babai_bazor_app/core/localization/app_language_scope.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/core/models/api_models.dart';
-import 'package:babai_bazor_app/core/services/auth_session_service.dart';
 import 'package:babai_bazor_app/core/services/category_service.dart';
+import 'package:babai_bazor_app/core/services/home_service.dart';
+import 'package:babai_bazor_app/features/home/presentation/screens/category_products_screen.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/cart_screen.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/orders_screen.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/product_details_screen.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -25,28 +28,97 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const String _mapsApiKey = 'AIzaSyAT3wIjV73qVXPAlgkyifnns38GztnbNF4';
+
   final CategoryService _categoryService = const CategoryService();
+  final HomeService _homeService = const HomeService();
   final TextEditingController _searchController = TextEditingController();
   final SpeechToText _speechToText = SpeechToText();
+  final PageController _bannerPageController = PageController(
+    viewportFraction: 0.92,
+  );
   late AppLanguage _activeLanguage;
 
   String? _apiLocation;
+  String _apiEtaText = '22 minutes';
+  String? _deliveryBadgeText;
   bool _isLoadingHome = true;
   bool _isLoadingCatalog = true;
   bool _isListening = false;
   String _searchQuery = '';
   String? _catalogError;
   Timer? _searchDebounce;
+  Timer? _bannerAutoSlideTimer;
+  List<HomeBannerSummary> _banners = const [];
+  int _activeBannerIndex = 0;
   List<CategorySummary> _categories = const [];
+  Map<int, HomeSection> _sectionsByCategory = const {};
   List<ProductSummary> _featuredProducts = const [];
   int? _selectedCategoryId;
+  int? _selectedSubCategoryId;
+  String? _resolvedGuestLocation;
+  String? _resolvedGuestPincode;
+  double? _resolvedGuestLatitude;
+  double? _resolvedGuestLongitude;
+
+  bool get _isGuestMode =>
+      (widget.currentLocation ?? '').trim().toLowerCase() == 'guest mode';
+
+  String get _effectivePincode {
+    final guestPincode = _resolvedGuestPincode?.trim();
+    if (guestPincode != null && guestPincode.isNotEmpty) {
+      return guestPincode;
+    }
+    return _resolvePincode(widget.currentLocation);
+  }
+
+  IconData _iconForCategory(String name, {int? categoryId}) {
+    switch (categoryId) {
+      case 1:
+        return Icons.shopping_bag_outlined;
+      case 2:
+        return Icons.fitness_center_outlined;
+      case 3:
+        return Icons.medical_services_outlined;
+      case 4:
+        return Icons.devices_outlined;
+      case 5:
+        return Icons.spa_outlined;
+      case 6:
+        return Icons.local_offer_outlined;
+      case 7:
+        return Icons.trending_down_outlined;
+      case 8:
+        return Icons.home_outlined;
+      case 9:
+        return Icons.diamond_outlined;
+    }
+
+    final lower = name.toLowerCase();
+    if (lower.contains('all')) return Icons.shopping_bag_outlined;
+    if (lower.contains('electronic')) return Icons.headphones_outlined;
+    if (lower.contains('beauty')) return Icons.spa_outlined;
+    if (lower.contains('pharmacy') || lower.contains('medicine')) {
+      return Icons.medication_outlined;
+    }
+    if (lower.contains('fruit') || lower.contains('vegetable')) {
+      return Icons.eco_outlined;
+    }
+    if (lower.contains('home') || lower.contains('kitchen')) {
+      return Icons.kitchen_outlined;
+    }
+    return Icons.grid_view_rounded;
+  }
 
   @override
   void initState() {
     super.initState();
     _activeLanguage = widget.language;
-    _loadHomeData();
-    _loadCatalogData();
+    if (_isGuestMode) {
+      _resolveGuestLocationAndLoadHome();
+    } else {
+      _loadHomeData();
+    }
   }
 
   @override
@@ -56,118 +128,244 @@ class _HomeScreenState extends State<HomeScreen> {
     if (scopedLanguage != _activeLanguage) {
       _activeLanguage = scopedLanguage;
       _loadHomeData();
-      _loadCatalogData();
     }
   }
 
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _bannerAutoSlideTimer?.cancel();
     _searchController.dispose();
+    _bannerPageController.dispose();
     _speechToText.stop();
     super.dispose();
   }
 
+  void _syncBannerAutoSlide() {
+    _bannerAutoSlideTimer?.cancel();
+    if (_banners.length <= 1) {
+      return;
+    }
+
+    _bannerAutoSlideTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted || !_bannerPageController.hasClients || _banners.isEmpty) {
+        return;
+      }
+
+      final nextIndex = (_activeBannerIndex + 1) % _banners.length;
+      _bannerPageController.animateToPage(
+        nextIndex,
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
   Future<void> _loadHomeData() async {
-    final pincode = _resolvePincode(widget.currentLocation);
+    final pincode = _effectivePincode;
 
     try {
-      final uri = Uri.parse(
-        '${ApiConstants.baseUrl}${ApiConstants.apiV1}/home',
-      ).replace(queryParameters: {'pincode': pincode});
-
-      final response = await http.get(
-        uri,
-        headers: {
-          ApiHeaders.contentType: ApiHeaders.applicationJson,
-          ApiHeaders.acceptLanguage: _activeLanguage.code,
-        },
+      final sectionsResponse = await _homeService.getHomeSections(
+        language: _activeLanguage,
+        pincode: pincode,
+        latitude: _resolvedGuestLatitude,
+        longitude: _resolvedGuestLongitude,
+      );
+      final fallbackHome = await _homeService.getHome(
+        language: _activeLanguage,
+        pincode: pincode,
       );
 
-      final homeResponse = HomeApiResponse.fromHttp(
-        response.statusCode,
-        response.body,
-      );
+      final sectionsData = sectionsResponse.data;
+
+      List<CategorySummary> categories = const [];
+      Map<int, HomeSection> sectionsByCategory = const {};
+      List<HomeBannerSummary> banners = const [];
+      List<ProductSummary> featuredProducts = const [];
+
+      if (sectionsData != null) {
+        banners = sectionsData.banners;
+        categories =
+            sectionsData.categoryPills
+                .map(
+                  (pill) => CategorySummary(
+                    id: pill.id,
+                    name: pill.name,
+                    iconUrl: pill.iconUrl,
+                    sortOrder: pill.sortOrder,
+                  ),
+                )
+                .toList()
+              ..sort((a, b) => (a.sortOrder ?? 0).compareTo(b.sortOrder ?? 0));
+
+        final sectionMap = <int, HomeSection>{};
+        for (final section in sectionsData.sections) {
+          final categoryId = section.categoryId;
+          if (categoryId == null) {
+            continue;
+          }
+          sectionMap[categoryId] = section;
+        }
+        sectionsByCategory = sectionMap;
+      }
+
+      if (banners.isEmpty) {
+        banners = fallbackHome.banners;
+      }
+
+      if (categories.isEmpty) {
+        categories = fallbackHome.categories;
+      }
+
+      int? selectedCategoryId = _selectedCategoryId;
+      if (categories.isNotEmpty) {
+        final exists = categories.any((c) => c.id == selectedCategoryId);
+        if (!exists) {
+          selectedCategoryId = categories.first.id;
+        }
+      } else {
+        selectedCategoryId = null;
+      }
+
+      final selectedSubCategories =
+          sectionsByCategory[selectedCategoryId]?.subCategories ?? const [];
+      if (_selectedSubCategoryId != null) {
+        final exists = selectedSubCategories.any(
+          (item) => item.id == _selectedSubCategoryId,
+        );
+        if (!exists) {
+          _selectedSubCategoryId = null;
+        }
+      }
+
+      if (_searchQuery.isEmpty) {
+        final sectionProducts = selectedCategoryId == null
+            ? const <ProductSummary>[]
+            : (sectionsByCategory[selectedCategoryId]?.products ?? const []);
+
+        if (sectionProducts.isNotEmpty) {
+          featuredProducts = sectionProducts;
+        } else {
+          featuredProducts = fallbackHome.featuredProducts;
+        }
+      }
+
+      final zone = sectionsData?.deliveryZone;
+      final etaText =
+          fallbackHome.etaText ??
+          (zone?.estimatedDeliveryHours != null
+              ? '${zone!.estimatedDeliveryHours} hours'
+              : '22 minutes');
+
+      String? deliveryBadge;
+      if (zone?.freeDeliveryAbove != null) {
+        deliveryBadge =
+            'Free delivery above Rs ${zone!.freeDeliveryAbove!.toStringAsFixed(0)}';
+      } else if (zone?.isServiceable == true) {
+        deliveryBadge = 'Serviceable';
+      }
 
       if (!mounted) return;
       setState(() {
-        _apiLocation = homeResponse.currentLocation;
+        _apiLocation =
+            sectionsData?.deliveryZone?.areaName ??
+            fallbackHome.currentLocation;
+        _apiEtaText = etaText;
+        _deliveryBadgeText = deliveryBadge;
+        _banners = banners;
+        if (_activeBannerIndex >= _banners.length) {
+          _activeBannerIndex = 0;
+        }
+        _categories = categories;
+        _sectionsByCategory = sectionsByCategory;
+        _selectedCategoryId = selectedCategoryId;
+        if (_searchQuery.isEmpty) {
+          _featuredProducts = featuredProducts;
+        }
         _isLoadingHome = false;
+        _isLoadingCatalog = false;
       });
+      _syncBannerAutoSlide();
     } catch (_) {
       if (!mounted) return;
-      setState(() => _isLoadingHome = false);
+      setState(() {
+        _isLoadingHome = false;
+        _isLoadingCatalog = false;
+      });
     }
   }
 
-  Future<void> _loadCatalogData() async {
-    setState(() {
-      _isLoadingCatalog = true;
-      _catalogError = null;
-    });
-
+  Future<void> _resolveGuestLocationAndLoadHome() async {
     try {
-      List<CategorySummary> categories = const [];
-      final parsedCategories = await _categoryService.getCategories(
-        language: _activeLanguage,
-      );
-      if (!parsedCategories.isSuccess) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _categories = const [];
-          _featuredProducts = const [];
-          _selectedCategoryId = null;
-          _catalogError =
-              parsedCategories.message ?? 'Unable to load categories';
-          _isLoadingCatalog = false;
-        });
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        await _loadHomeData();
         return;
       }
-      categories = parsedCategories.data;
 
-      int? selectedCategoryId = _selectedCategoryId;
-      final selectedStillExists = categories.any(
-        (item) => item.id == selectedCategoryId,
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        await _loadHomeData();
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
       );
-      if (!selectedStillExists) {
-        selectedCategoryId = categories.isNotEmpty ? categories.first.id : null;
-      }
 
-      List<ProductSummary> products = const [];
-      if (selectedCategoryId != null) {
-        final productsResponse = await _fetchProducts(
-          categoryId: selectedCategoryId,
-          search: _searchQuery,
-        );
-        products = productsResponse.data?.items ?? const [];
+      _resolvedGuestLatitude = position.latitude;
+      _resolvedGuestLongitude = position.longitude;
 
-        if (!productsResponse.isSuccess && !mounted) {
-          return;
+      final uri = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$_mapsApiKey',
+      );
+      final response = await http.get(uri);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final status = body['status']?.toString() ?? '';
+        final results = body['results'] as List<dynamic>?;
+
+        if (status == 'OK' && results != null && results.isNotEmpty) {
+          final first = results.first as Map<String, dynamic>;
+          final formattedAddress =
+              first['formatted_address']?.toString().trim() ?? '';
+          final components =
+              first['address_components'] as List<dynamic>? ?? const [];
+
+          String pincode = '';
+          for (final item in components) {
+            final map = item as Map<String, dynamic>;
+            final types = (map['types'] as List<dynamic>? ?? const [])
+                .map((e) => e.toString())
+                .toList();
+            if (types.contains('postal_code')) {
+              pincode = map['long_name']?.toString() ?? '';
+              break;
+            }
+          }
+
+          if (mounted) {
+            setState(() {
+              _resolvedGuestLocation = formattedAddress.isEmpty
+                  ? null
+                  : formattedAddress;
+              _resolvedGuestPincode = pincode.trim().length == 6
+                  ? pincode.trim()
+                  : null;
+            });
+          }
         }
-        if (!productsResponse.isSuccess) {
-          setState(() {
-            _catalogError =
-                productsResponse.message ?? 'Unable to load products';
-          });
-        }
       }
-
-      if (!mounted) return;
-      setState(() {
-        _categories = categories;
-        _selectedCategoryId = selectedCategoryId;
-        _featuredProducts = products;
-        _isLoadingCatalog = false;
-      });
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _catalogError = 'Unable to load categories and products.';
-        _isLoadingCatalog = false;
-      });
+      // Intentionally fall back to default pincode behavior.
     }
+
+    await _loadHomeData();
   }
 
   Future<void> _showCategoryDetails(CategorySummary category) async {
@@ -218,43 +416,77 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<Map<String, String>> _apiHeaders() async {
-    final headers = <String, String>{
-      ApiHeaders.contentType: ApiHeaders.applicationJson,
-      ApiHeaders.acceptLanguage: _activeLanguage.code,
-    };
-
-    final token = await AuthSessionService.instance.getToken();
-    if (token != null && token.trim().isNotEmpty) {
-      headers[ApiHeaders.authorization] =
-          '${ApiHeaders.bearerPrefix}${token.trim()}';
-    }
-    return headers;
-  }
-
-  Future<ProductsListApiResponse> _fetchProducts({
-    int? categoryId,
-    String? search,
+  Future<void> _openCategoryProducts(
+    CategorySummary category, {
+    int? initialSubCategoryId,
   }) async {
-    final response = await http.get(
-      ProductApiEndpoints.list(
-        categoryId: categoryId,
-        search: search,
-        pageNumber: 1,
-        pageSize: 20,
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CategoryProductsScreen(
+          categoryId: category.id,
+          categoryName: category.name,
+          language: _activeLanguage,
+          pincode: _effectivePincode,
+          initialSubCategoryId: initialSubCategoryId,
+        ),
       ),
-      headers: await _apiHeaders(),
     );
-
-    return ProductsListApiResponse.fromHttp(response.statusCode, response.body);
   }
 
   Future<void> _selectCategory(CategorySummary category) async {
     setState(() {
       _selectedCategoryId = category.id;
+      _selectedSubCategoryId = null;
     });
 
     await _runSearch();
+  }
+
+  Future<void> _selectSubCategory(int? subCategoryId) async {
+    setState(() {
+      _selectedSubCategoryId = subCategoryId;
+    });
+    await _runSearch();
+  }
+
+  void _onBannerTap(HomeBannerSummary banner) {
+    final linkedCategoryId = banner.linkedCategoryId;
+    if (linkedCategoryId != null) {
+      CategorySummary? category;
+      for (final item in _categories) {
+        if (item.id == linkedCategoryId) {
+          category = item;
+          break;
+        }
+      }
+      if (category != null) {
+        _openCategoryProducts(category);
+        return;
+      }
+
+      _openCategoryProducts(
+        CategorySummary(
+          id: linkedCategoryId,
+          name: (banner.title ?? '').trim().isNotEmpty
+              ? banner.title!.trim()
+              : 'Category Products',
+        ),
+      );
+      return;
+    }
+
+    final linkedProductId = banner.linkedProductId;
+    if (linkedProductId != null && linkedProductId > 0) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ProductDetailsScreen(
+            productId: linkedProductId,
+            language: _activeLanguage,
+            pincode: _effectivePincode,
+          ),
+        ),
+      );
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -275,16 +507,59 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final response = await _fetchProducts(
-        categoryId: _selectedCategoryId,
-        search: _searchQuery,
-      );
+      List<ProductSummary> products = const [];
+      String? message;
+
+      if (_searchQuery.isNotEmpty) {
+        final response = await _homeService.search(
+          language: _activeLanguage,
+          query: _searchQuery,
+          pincode: _effectivePincode,
+        );
+        products = response.data?.products ?? const [];
+        if (!response.isSuccess) {
+          message = response.message ?? 'Unable to search products';
+        }
+      } else {
+        final selectedCategoryId = _selectedCategoryId;
+        if (selectedCategoryId != null) {
+          if (_selectedSubCategoryId != null) {
+            final response = await _homeService.getCategoryProducts(
+              language: _activeLanguage,
+              categoryId: selectedCategoryId,
+              subCategoryId: _selectedSubCategoryId,
+              pageNumber: 1,
+              pageSize: 20,
+            );
+            products = response.data?.products?.items ?? const [];
+            if (!response.isSuccess) {
+              message = response.message ?? 'Unable to load products';
+            }
+          } else {
+            final sectionProducts =
+                _sectionsByCategory[selectedCategoryId]?.products ?? const [];
+            if (sectionProducts.isNotEmpty) {
+              products = sectionProducts;
+            } else {
+              final response = await _homeService.getCategoryProducts(
+                language: _activeLanguage,
+                categoryId: selectedCategoryId,
+                pageNumber: 1,
+                pageSize: 20,
+              );
+              products = response.data?.products?.items ?? const [];
+              if (!response.isSuccess) {
+                message = response.message ?? 'Unable to load products';
+              }
+            }
+          }
+        }
+      }
+
       if (!mounted) return;
       setState(() {
-        _featuredProducts = response.data?.items ?? const [];
-        _catalogError = response.isSuccess
-            ? null
-            : (response.message ?? 'Unable to load products');
+        _featuredProducts = products;
+        _catalogError = message;
         _isLoadingCatalog = false;
       });
     } catch (_) {
@@ -379,17 +654,29 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final locationText = (_apiLocation != null && _apiLocation!.isNotEmpty)
         ? _apiLocation!
+        : (_resolvedGuestLocation != null &&
+              _resolvedGuestLocation!.trim().isNotEmpty)
+        ? _resolvedGuestLocation!
         : (widget.currentLocation != null &&
               widget.currentLocation!.trim().isNotEmpty)
         ? widget.currentLocation!.trim()
         : 'Current location unavailable';
 
-    final categoryPreview = _categories.take(8).toList();
-    final pincode = _resolvePincode(widget.currentLocation);
+    final pincode = _effectivePincode;
+    CategorySummary? selectedCategory;
+    for (final item in _categories) {
+      if (item.id == _selectedCategoryId) {
+        selectedCategory = item;
+        break;
+      }
+    }
+    final selectedSubCategories =
+        _sectionsByCategory[_selectedCategoryId]?.subCategories ?? const [];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F2),
+      backgroundColor: const Color(0xFFF3F4F6),
       body: SafeArea(
+        bottom: false,
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,7 +686,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFFF8D84D), Color(0xFFF6E87D)],
+                    colors: [Color(0xFFF5D34E), Color(0xFFF3DE8A)],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                   ),
@@ -407,12 +694,72 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Welcome to Babai Bazzor',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                      ),
+                    Row(
+                      children: [
+                        const Text(
+                          'Babai in',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E232C),
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          height: 42,
+                          width: 42,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.notifications_none_rounded,
+                            color: Color(0xFF1F2A37),
+                            size: 23,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text(
+                          _apiEtaText,
+                          style: const TextStyle(
+                            fontSize: 42,
+                            height: 1,
+                            letterSpacing: -0.7,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                        if (_deliveryBadgeText != null &&
+                            _deliveryBadgeText!.trim().isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFC7E8E8),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Text(
+                                _deliveryBadgeText!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF0D6E6E),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 6),
                     if (_isLoadingHome)
@@ -422,35 +769,42 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     const SizedBox(height: 2),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Icon(
                           Icons.location_on_outlined,
-                          size: 18,
-                          color: Color(0xFF3A3A3A),
+                          size: 17,
+                          color: Color(0xFF202427),
                         ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            locationText,
+                            'HOME - $locationText',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF3A3A3A),
+                              fontSize: 22,
+                              height: 1.1,
+                              letterSpacing: -0.3,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1F2937),
                             ),
                           ),
+                        ),
+                        const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Color(0xFF1F2937),
                         ),
                       ],
                     ),
                     const SizedBox(height: 14),
                     Container(
                       width: double.infinity,
-                      height: 56,
+                      height: 60,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
                         children: [
@@ -466,14 +820,14 @@ class _HomeScreenState extends State<HomeScreen> {
                               onChanged: _onSearchChanged,
                               onSubmitted: (_) => _runSearch(),
                               decoration: const InputDecoration(
-                                hintText: 'Search products',
+                                hintText: 'Search "disposables"',
                                 border: InputBorder.none,
                                 isDense: true,
                               ),
                               style: const TextStyle(
-                                fontSize: 17,
+                                fontSize: 16,
                                 color: Color(0xFF303030),
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
@@ -511,9 +865,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               SizedBox(
-                height: 52,
+                height: 84,
                 child: _categories.isEmpty
                     ? Center(
                         child: Text(
@@ -539,39 +893,297 @@ class _HomeScreenState extends State<HomeScreen> {
                           return GestureDetector(
                             onTap: () => _selectCategory(item),
                             onLongPress: () => _showCategoryDetails(item),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: selected
-                                    ? const Color(0xFF202020)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: selected
-                                      ? const Color(0xFF202020)
-                                      : const Color(0xFFE0E0E0),
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  item.name,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: selected
-                                        ? Colors.white
-                                        : const Color(0xFF2E2E2E),
+                            child: SizedBox(
+                              width: 64,
+                              child: Column(
+                                children: [
+                                  Expanded(
+                                    child: Container(
+                                      width: 46,
+                                      height: 46,
+                                      decoration: BoxDecoration(
+                                        color: selected
+                                            ? const Color(0xFF1E293B)
+                                            : const Color(0xFFFFFFFF),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: selected
+                                              ? const Color(0xFF1E293B)
+                                              : const Color(0xFFD1D5DB),
+                                          width: 1.2,
+                                        ),
+                                      ),
+                                      child:
+                                          (item.iconUrl != null &&
+                                              item.iconUrl!.trim().isNotEmpty)
+                                          ? ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(11),
+                                              child: Image.network(
+                                                ApiConstants.resolveMediaUrl(
+                                                  item.iconUrl,
+                                                ),
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) => Icon(
+                                                      _iconForCategory(
+                                                        item.name,
+                                                        categoryId: item.id,
+                                                      ),
+                                                      size: 24,
+                                                      color: selected
+                                                          ? Colors.white
+                                                          : const Color(
+                                                              0xFF232323,
+                                                            ),
+                                                    ),
+                                              ),
+                                            )
+                                          : Icon(
+                                              _iconForCategory(
+                                                item.name,
+                                                categoryId: item.id,
+                                              ),
+                                              size: 24,
+                                              color: selected
+                                                  ? Colors.white
+                                                  : const Color(0xFF232323),
+                                            ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    item.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: selected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: const Color(0xFF242424),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 180),
+                                    width: selected ? 34 : 0,
+                                    height: 3,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2D2D2D),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           );
                         },
                       ),
               ),
+              if (selectedSubCategories.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    scrollDirection: Axis.horizontal,
+                    itemBuilder: (context, index) {
+                      final isAll = index == 0;
+                      final item = isAll
+                          ? null
+                          : selectedSubCategories[index - 1];
+                      final selected = isAll
+                          ? _selectedSubCategoryId == null
+                          : _selectedSubCategoryId == item!.id;
+                      return InkWell(
+                        onTap: () =>
+                            _selectSubCategory(isAll ? null : item!.id),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? const Color(0xFF111827)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: selected
+                                  ? const Color(0xFF111827)
+                                  : const Color(0xFFE3E3E3),
+                            ),
+                          ),
+                          child: Text(
+                            isAll ? 'All' : item!.name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: selected
+                                  ? Colors.white
+                                  : const Color(0xFF333333),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 8),
+                    itemCount: selectedSubCategories.length + 1,
+                  ),
+                ),
+              ],
+              if (_banners.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 168,
+                  child: PageView.builder(
+                    controller: _bannerPageController,
+                    itemCount: _banners.length,
+                    onPageChanged: (index) {
+                      setState(() => _activeBannerIndex = index);
+                    },
+                    itemBuilder: (context, index) {
+                      final banner = _banners[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => _onBannerTap(banner),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(18),
+                              color: const Color(0xFFECECEC),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x26000000),
+                                  blurRadius: 10,
+                                  offset: Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(18),
+                                  child:
+                                      (banner.imageUrl != null &&
+                                          banner.imageUrl!.trim().isNotEmpty)
+                                      ? Image.network(
+                                          ApiConstants.resolveMediaUrl(
+                                            banner.imageUrl,
+                                          ),
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
+                                                return Container(
+                                                  color: const Color(
+                                                    0xFFE5E7EB,
+                                                  ),
+                                                  alignment: Alignment.center,
+                                                  child: const Icon(
+                                                    Icons.image_not_supported,
+                                                    color: Color(0xFF9CA3AF),
+                                                    size: 34,
+                                                  ),
+                                                );
+                                              },
+                                        )
+                                      : Container(
+                                          color: const Color(0xFFE5E7EB),
+                                          alignment: Alignment.center,
+                                          child: const Icon(
+                                            Icons.image_outlined,
+                                            color: Color(0xFF9CA3AF),
+                                            size: 34,
+                                          ),
+                                        ),
+                                ),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(18),
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0x8C000000),
+                                        Color(0x24000000),
+                                        Color(0x10000000),
+                                      ],
+                                      begin: Alignment.bottomCenter,
+                                      end: Alignment.topCenter,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  left: 14,
+                                  right: 14,
+                                  bottom: 12,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        banner.title ?? '',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      if ((banner.subtitle ?? '').isNotEmpty)
+                                        Text(
+                                          banner.subtitle!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(_banners.length, (index) {
+                      final isActive = index == _activeBannerIndex;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        margin: const EdgeInsets.only(right: 6),
+                        height: 6,
+                        width: isActive ? 20 : 6,
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? const Color(0xFF111827)
+                              : const Color(0xFFD1D5DB),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               SizedBox(
                 height: 158,
@@ -661,7 +1273,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                             (item.imageUrl != null &&
                                                 item.imageUrl!.isNotEmpty)
                                             ? Image.network(
-                                                item.imageUrl!,
+                                                ApiConstants.resolveMediaUrl(
+                                                  item.imageUrl,
+                                                ),
                                                 fit: BoxFit.contain,
                                                 errorBuilder:
                                                     (
@@ -715,63 +1329,64 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: EdgeInsets.fromLTRB(14, 10, 14, 0),
                   child: LinearProgressIndicator(minHeight: 2),
                 ),
-              const SizedBox(height: 18),
-              const _SectionTitle(title: 'Categories'),
-              const SizedBox(height: 12),
-              _CategoryGrid(items: categoryPreview),
               const SizedBox(height: 16),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: Container(
-        height: 82,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFE5E5E5))),
-        ),
-        child: Row(
-          children: [
-            const _BottomNavItem(
-              icon: Icons.home_filled,
-              label: 'Home',
-              selected: true,
-            ),
-            _BottomNavItem(
-              icon: Icons.receipt_long_outlined,
-              label: 'Orders',
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => OrdersScreen(language: _activeLanguage),
-                  ),
-                );
-              },
-            ),
-            _BottomNavItem(
-              icon: Icons.shopping_cart_outlined,
-              label: 'Cart',
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        CartScreen(language: _activeLanguage, pincode: pincode),
-                  ),
-                );
-              },
-            ),
-            _BottomNavItem(
-              icon: Icons.person_outline_rounded,
-              label: 'Profile',
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ProfileScreen(language: _activeLanguage),
-                  ),
-                );
-              },
-            ),
-          ],
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.only(top: 8, bottom: 8),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Color(0xFFE5E5E5))),
+          ),
+          child: Row(
+            children: [
+              const _BottomNavItem(
+                icon: Icons.home_filled,
+                label: 'Home',
+                selected: true,
+              ),
+              _BottomNavItem(
+                icon: Icons.receipt_long_outlined,
+                label: 'Orders',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => OrdersScreen(language: _activeLanguage),
+                    ),
+                  );
+                },
+              ),
+              _BottomNavItem(
+                icon: Icons.shopping_cart_outlined,
+                label: 'Cart',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CartScreen(
+                        language: _activeLanguage,
+                        pincode: pincode,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              _BottomNavItem(
+                icon: Icons.person_outline_rounded,
+                label: 'Profile',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ProfileScreen(language: _activeLanguage),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -796,9 +1411,10 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _CategoryGrid extends StatelessWidget {
-  const _CategoryGrid({required this.items});
+  const _CategoryGrid({required this.items, required this.onCategoryTap});
 
   final List<CategorySummary> items;
+  final ValueChanged<CategorySummary> onCategoryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -843,48 +1459,52 @@ class _CategoryGrid extends StatelessWidget {
           ];
           final tileColor = bgColors[index % bgColors.length];
 
-          return Column(
-            children: [
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: tileColor,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: (item.iconUrl != null && item.iconUrl!.isNotEmpty)
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: Image.network(
-                            item.iconUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(
-                                  Icons.category_outlined,
-                                  color: Color(0xFF303030),
-                                  size: 34,
-                                ),
+          return InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => onCategoryTap(item),
+            child: Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: tileColor,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: (item.iconUrl != null && item.iconUrl!.isNotEmpty)
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Image.network(
+                              ApiConstants.resolveMediaUrl(item.iconUrl),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(
+                                    Icons.category_outlined,
+                                    color: Color(0xFF303030),
+                                    size: 34,
+                                  ),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.category_outlined,
+                            color: Color(0xFF303030),
+                            size: 34,
                           ),
-                        )
-                      : const Icon(
-                          Icons.category_outlined,
-                          color: Color(0xFF303030),
-                          size: 34,
-                        ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                item.name,
-                maxLines: 2,
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                const SizedBox(height: 8),
+                Text(
+                  item.name,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -912,18 +1532,20 @@ class _BottomNavItem extends StatelessWidget {
         onTap: onTap,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
+              size: 26,
               color: selected
                   ? const Color(0xFF202020)
                   : const Color(0xFF6D6D6D),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                 color: selected
                     ? const Color(0xFF202020)

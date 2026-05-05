@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,8 +7,10 @@ import 'package:babai_bazor_app/core/constants/app_colors.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/core/models/api_models.dart';
 import 'package:babai_bazor_app/features/auth/presentation/screens/otp_verification_screen.dart';
+import 'package:babai_bazor_app/features/home/presentation/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
 class MobileLoginScreen extends StatefulWidget {
@@ -16,18 +18,18 @@ class MobileLoginScreen extends StatefulWidget {
     super.key,
     required this.language,
     required this.onLanguageChanged,
-    this.selectedLocation,
   });
 
   final AppLanguage language;
   final ValueChanged<AppLanguage> onLanguageChanged;
-  final String? selectedLocation;
 
   @override
   State<MobileLoginScreen> createState() => _MobileLoginScreenState();
 }
 
 class _MobileLoginScreenState extends State<MobileLoginScreen> {
+  static const String _mapsApiKey = 'AIzaSyAT3wIjV73qVXPAlgkyifnns38GztnbNF4';
+
   final TextEditingController _phoneController = TextEditingController();
   late AppLanguage _screenLanguage;
   bool _isSendingOtp = false;
@@ -64,6 +66,119 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
     super.dispose();
   }
 
+  Future<Map<String, String>?> _resolveCurrentLocation() async {
+    final t = AppLocalizations.tr;
+
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) {
+        await _showErrorDialog(t(_screenLanguage, 'location_service_disabled'));
+      }
+      return null;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        await _showErrorDialog(
+          t(_screenLanguage, 'location_permission_denied'),
+        );
+      }
+      return null;
+    }
+
+    final position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    final uri = Uri.parse(
+      'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$_mapsApiKey',
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode != 200) {
+      if (mounted) {
+        await _showErrorDialog(t(_screenLanguage, 'location_fetch_failed'));
+      }
+      return null;
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final status = body['status']?.toString() ?? '';
+    final results = body['results'] as List<dynamic>?;
+
+    if (status != 'OK' || results == null || results.isEmpty) {
+      if (mounted) {
+        await _showErrorDialog(t(_screenLanguage, 'location_not_found'));
+      }
+      return null;
+    }
+
+    final first = results.first as Map<String, dynamic>;
+    final formattedAddress = first['formatted_address']?.toString() ?? '';
+    final components =
+        first['address_components'] as List<dynamic>? ?? const [];
+
+    String pincode = '';
+    for (final item in components) {
+      final map = item as Map<String, dynamic>;
+      final types = (map['types'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .toList();
+      if (types.contains('postal_code')) {
+        pincode = map['long_name']?.toString() ?? '';
+        break;
+      }
+    }
+
+    if (pincode.trim().length != 6) {
+      if (mounted) {
+        await _showErrorDialog(t(_screenLanguage, 'location_not_found'));
+      }
+      return null;
+    }
+
+    return {'pincode': pincode.trim(), 'location': formattedAddress};
+  }
+
+  Future<bool> _checkPincode(String pincode) async {
+    final t = AppLocalizations.tr;
+
+    final response = await http
+        .post(
+          LocationApiEndpoints.checkPincode(),
+          headers: {
+            ApiHeaders.contentType: ApiHeaders.applicationJson,
+            ApiHeaders.acceptLanguage: _screenLanguage.code,
+          },
+          body: jsonEncode({'pincode': pincode}),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = t(_screenLanguage, 'location_not_serviceable');
+      try {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final apiMessage = body['message']?.toString();
+        if (apiMessage != null && apiMessage.trim().isNotEmpty) {
+          message = apiMessage.trim();
+        }
+      } catch (_) {}
+
+      if (mounted) {
+        await _showErrorDialog(message);
+      }
+      return false;
+    }
+
+    return true;
+  }
+
   Future<void> _goToOtp() async {
     final t = AppLocalizations.tr;
     final phone = _phoneController.text.trim();
@@ -91,6 +206,23 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
     });
 
     try {
+      _log('Resolving current location and pincode.');
+      final locationData = await _resolveCurrentLocation();
+      if (locationData == null) {
+        _log('Aborted: unable to resolve current location/pincode.');
+        return;
+      }
+
+      final pincode = locationData['pincode']!;
+      final currentLocation = locationData['location'];
+
+      _log('Checking pincode serviceability. pincode=$pincode');
+      final serviceable = await _checkPincode(pincode);
+      if (!serviceable) {
+        _log('Aborted: pincode not serviceable.');
+        return;
+      }
+
       _log('Sending OTP request to ${AuthApiEndpoints.sendOtp()}');
       final response = await http
           .post(
@@ -99,7 +231,11 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
               ApiHeaders.contentType: ApiHeaders.applicationJson,
               ApiHeaders.acceptLanguage: _screenLanguage.code,
             },
-            body: jsonEncode({'mobile': phone}),
+            body: jsonEncode({
+              'mobile': phone,
+              'pincode': pincode,
+              'location': currentLocation,
+            }),
           )
           .timeout(const Duration(seconds: 15));
 
@@ -132,7 +268,7 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
               language: _screenLanguage,
               phoneNumber: phone,
               prefilledOtp: prefilledOtp,
-              deliveryLocation: widget.selectedLocation,
+              deliveryLocation: currentLocation,
             ),
           ),
         );
@@ -199,6 +335,18 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
     );
   }
 
+  void _continueAsGuest() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => HomeScreen(
+          language: _screenLanguage,
+          currentLocation: 'Guest Mode',
+        ),
+      ),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.tr;
@@ -210,38 +358,18 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
               child: Row(
                 children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                  ),
                   const Spacer(),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    child: TextButton(
-                      onPressed: () {
-                        final nextLanguage = _screenLanguage == AppLanguage.en
-                            ? AppLanguage.te
-                            : AppLanguage.en;
-                        _log(
-                          'Language toggled from ${_screenLanguage.code} to ${nextLanguage.code}.',
-                        );
-                        widget.onLanguageChanged(nextLanguage);
-                        setState(() {
-                          _screenLanguage = nextLanguage;
-                        });
-                      },
-                      child: Text(
-                        _screenLanguage == AppLanguage.en ? 'తెలుగు' : 'EN',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  TextButton(
+                    onPressed: _isSendingOtp ? null : _continueAsGuest,
+                    child: Text(
+                      t(_screenLanguage, 'skip'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
                       ),
                     ),
                   ),
@@ -263,17 +391,19 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    t(AppLanguage.te, 'login_welcome_title'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      height: 1,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                  if (_screenLanguage == AppLanguage.te) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      t(AppLanguage.te, 'login_welcome_title'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        height: 1,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

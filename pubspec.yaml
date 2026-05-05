@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   geolocator: ^12.0.0
   http: ^1.2.2
+  razorpay_flutter: ^1.4.0
   shared_preferences: ^2.3.2
   speech_to_text: ^7.3.0
 

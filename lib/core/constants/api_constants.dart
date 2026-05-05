@@ -3,6 +3,24 @@ class ApiConstants {
 
   static const String baseUrl = 'http://204.168.159.160:8085';
   static const String apiV1 = '/api/v1';
+
+  static String resolveMediaUrl(String? rawValue) {
+    final raw = rawValue?.trim() ?? '';
+    if (raw.isEmpty) {
+      return '';
+    }
+
+    final parsed = Uri.tryParse(raw);
+    if (parsed != null && parsed.hasScheme) {
+      return raw;
+    }
+
+    final base = Uri.parse(baseUrl);
+    if (raw.startsWith('/')) {
+      return base.resolve(raw).toString();
+    }
+    return base.resolve('/$raw').toString();
+  }
 }
 
 class AuthApiEndpoints {
@@ -21,6 +39,50 @@ class AuthApiEndpoints {
   }
 }
 
+class LocationApiEndpoints {
+  const LocationApiEndpoints._();
+
+  static Uri checkPincode() {
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/location/check-pincode',
+    );
+  }
+}
+
+class HomeApiEndpoints {
+  const HomeApiEndpoints._();
+
+  static Uri home({required String pincode}) {
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/home',
+    ).replace(queryParameters: {'pincode': pincode.trim()});
+  }
+
+  static Uri sections({
+    required String pincode,
+    double? latitude,
+    double? longitude,
+  }) {
+    final query = <String, String>{'pincode': pincode.trim()};
+    if (latitude != null) {
+      query['lat'] = latitude.toStringAsFixed(4);
+    }
+    if (longitude != null) {
+      query['lng'] = longitude.toStringAsFixed(4);
+    }
+
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/home/sections',
+    ).replace(queryParameters: query);
+  }
+
+  static Uri search({required String query, required String pincode}) {
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/home/search',
+    ).replace(queryParameters: {'q': query.trim(), 'pincode': pincode.trim()});
+  }
+}
+
 class CategoryApiEndpoints {
   const CategoryApiEndpoints._();
 
@@ -32,6 +94,38 @@ class CategoryApiEndpoints {
     return Uri.parse(
       '${ApiConstants.baseUrl}${ApiConstants.apiV1}/categories/$id',
     );
+  }
+
+  static Uri tree() {
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/categories/tree',
+    );
+  }
+
+  static Uri products(
+    int categoryId, {
+    int? subCategoryId,
+    String? sort,
+    int? pageNumber,
+    int? pageSize,
+  }) {
+    final query = <String, String>{};
+    if (subCategoryId != null) {
+      query['subCategoryId'] = '$subCategoryId';
+    }
+    if (sort != null && sort.trim().isNotEmpty) {
+      query['sort'] = sort.trim();
+    }
+    if (pageNumber != null) {
+      query['pageNumber'] = '$pageNumber';
+    }
+    if (pageSize != null) {
+      query['pageSize'] = '$pageSize';
+    }
+
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/categories/$categoryId/products',
+    ).replace(queryParameters: query.isEmpty ? null : query);
   }
 }
 

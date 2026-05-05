@@ -1,8 +1,13 @@
+import 'package:babai_bazor_app/core/constants/api_constants.dart';
+import 'package:babai_bazor_app/core/constants/payment_constants.dart';
 import 'package:babai_bazor_app/core/localization/app_language_scope.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/core/models/api_models.dart';
 import 'package:babai_bazor_app/core/services/cart_service.dart';
+import 'package:babai_bazor_app/features/home/presentation/screens/payment_failure_screen.dart';
+import 'package:babai_bazor_app/features/home/presentation/screens/payment_success_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key, required this.language, this.pincode});
@@ -16,10 +21,13 @@ class CartScreen extends StatefulWidget {
 
 class _CartScreenState extends State<CartScreen> {
   final CartService _cartService = const CartService();
+  final Razorpay _razorpay = Razorpay();
   late AppLanguage _activeLanguage;
 
   bool _isLoading = true;
   bool _isUpdating = false;
+  bool _isProcessingCheckout = false;
+  double _checkoutAmount = 0;
   CartData? _cart;
 
   String _money(num value) => 'Rs ${value.toStringAsFixed(0)}';
@@ -36,7 +44,16 @@ class _CartScreenState extends State<CartScreen> {
   void initState() {
     super.initState();
     _activeLanguage = widget.language;
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _onPaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _onPaymentError);
+    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _onExternalWallet);
     _loadCart();
+  }
+
+  @override
+  void dispose() {
+    _razorpay.clear();
+    super.dispose();
   }
 
   @override
@@ -170,6 +187,120 @@ class _CartScreenState extends State<CartScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(response.message ?? 'Unable to clear cart')),
     );
+  }
+
+  void _onPaymentSuccess(PaymentSuccessResponse response) async {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isProcessingCheckout = false;
+    });
+
+    await _clearCart();
+    if (!mounted) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PaymentSuccessScreen(amount: _checkoutAmount),
+      ),
+    );
+  }
+
+  void _onPaymentError(PaymentFailureResponse response) async {
+    if (!mounted) {
+      return;
+    }
+
+    final message = response.message?.trim();
+    final code = response.code;
+    if (message != null && message.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment failed ($code): $message')),
+      );
+    }
+
+    setState(() {
+      _isProcessingCheckout = false;
+    });
+
+    final retry = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PaymentFailureScreen(amount: _checkoutAmount),
+      ),
+    );
+
+    if (retry == true && mounted) {
+      _openRazorpayCheckout(_checkoutAmount);
+    }
+  }
+
+  void _onExternalWallet(ExternalWalletResponse response) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'External wallet selected: ${response.walletName ?? 'Unknown'}',
+        ),
+      ),
+    );
+  }
+
+  void _openRazorpayCheckout(num amount) {
+    if (_isProcessingCheckout || _isUpdating) {
+      return;
+    }
+
+    final key = PaymentConstants.razorpayKeyId.trim();
+    final looksInvalidKey =
+        key.isEmpty ||
+        key.contains('replace_with_your_key_id') ||
+        (!key.startsWith('rzp_test_') && !key.startsWith('rzp_live_'));
+    if (looksInvalidKey) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Set a valid Razorpay Key ID in payment_constants.dart before checkout.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isProcessingCheckout = true;
+      _checkoutAmount = amount.toDouble();
+    });
+    final amountInPaise = (amount * 100).round();
+    final options = {
+      'key': PaymentConstants.razorpayKeyId,
+      'amount': amountInPaise,
+      'name': PaymentConstants.merchantName,
+      'description': PaymentConstants.merchantDescription,
+      'timeout': 300,
+      'retry': {'enabled': true, 'max_count': 2},
+      'prefill': {'contact': '9999999999', 'email': 'guest@babaibazor.com'},
+      'theme': {'color': '#FF6F45'},
+    };
+
+    try {
+      _razorpay.open(options);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isProcessingCheckout = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to start Razorpay checkout')),
+      );
+    }
   }
 
   @override
@@ -331,7 +462,7 @@ class _CartScreenState extends State<CartScreen> {
                               ? ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
                                   child: Image.network(
-                                    item.imageUrl!,
+                                    ApiConstants.resolveMediaUrl(item.imageUrl),
                                     fit: BoxFit.cover,
                                     errorBuilder:
                                         (
@@ -478,15 +609,9 @@ class _CartScreenState extends State<CartScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _isUpdating
+                        onPressed: (_isUpdating || _isProcessingCheckout)
                             ? null
-                            : () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Checkout coming soon'),
-                                  ),
-                                );
-                              },
+                            : () => _openRazorpayCheckout(total),
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size.fromHeight(50),
                           backgroundColor: const Color(0xFFFF6F45),
@@ -495,20 +620,29 @@ class _CartScreenState extends State<CartScreen> {
                             borderRadius: BorderRadius.circular(28),
                           ),
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'CHECKOUT',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.4,
+                        child: _isProcessingCheckout
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'CHECKOUT',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Icon(Icons.arrow_forward_rounded),
+                                ],
                               ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(Icons.arrow_forward_rounded),
-                          ],
-                        ),
                       ),
                     ),
                   ],

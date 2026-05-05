@@ -1,6 +1,6 @@
 import 'package:babai_bazor_app/core/constants/app_colors.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
-import 'package:babai_bazor_app/features/onboarding/presentation/screens/location_selection_screen.dart';
+import 'package:babai_bazor_app/features/auth/presentation/screens/mobile_login_screen.dart';
 import 'package:flutter/material.dart';
 
 class LanguageSelectionScreen extends StatefulWidget {
@@ -31,7 +31,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen> {
     widget.onLanguageChanged(_selected);
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => LocationSelectionScreen(
+        builder: (_) => MobileLoginScreen(
           language: _selected,
           onLanguageChanged: widget.onLanguageChanged,
         ),

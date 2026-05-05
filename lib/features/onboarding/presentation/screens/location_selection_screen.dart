@@ -266,7 +266,6 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
         builder: (_) => MobileLoginScreen(
           language: _screenLanguage,
           onLanguageChanged: widget.onLanguageChanged,
-          selectedLocation: area,
         ),
       ),
     );

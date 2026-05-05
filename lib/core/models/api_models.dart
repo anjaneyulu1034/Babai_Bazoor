@@ -43,10 +43,19 @@ class VerifyOtpApiResponse {
 }
 
 class HomeApiResponse {
-  const HomeApiResponse({this.currentLocation, this.etaText});
+  const HomeApiResponse({
+    this.currentLocation,
+    this.etaText,
+    this.banners = const [],
+    this.categories = const [],
+    this.featuredProducts = const [],
+  });
 
   final String? currentLocation;
   final String? etaText;
+  final List<HomeBannerSummary> banners;
+  final List<CategorySummary> categories;
+  final List<ProductSummary> featuredProducts;
 
   factory HomeApiResponse.fromHttp(int statusCode, String rawBody) {
     if (statusCode < 200 || statusCode >= 300) {
@@ -60,6 +69,15 @@ class HomeApiResponse {
 
     final data = payload['data'];
     final dataMap = data is Map<String, dynamic> ? data : null;
+    final banners = _ApiModelParser.toMapList(
+      dataMap?['banners'],
+    ).map(HomeBannerSummary.fromJson).toList();
+    final categories = _ApiModelParser.toMapList(
+      dataMap?['categories'],
+    ).map(CategorySummary.fromJson).toList();
+    final featuredProducts = _ApiModelParser.toMapList(
+      dataMap?['featuredProducts'],
+    ).map(ProductSummary.fromJson).toList();
 
     final location =
         _ApiModelParser.pickFirstString(dataMap, const [
@@ -106,12 +124,233 @@ class HomeApiResponse {
       etaText: eta?.trim().isNotEmpty == true
           ? _normalizeEta(eta!.trim())
           : null,
+      banners: banners,
+      categories: categories,
+      featuredProducts: featuredProducts,
     );
   }
 
   static String _normalizeEta(String raw) {
     final hasUnit = raw.toLowerCase().contains('min');
     return hasUnit ? raw : '$raw minutes';
+  }
+}
+
+class HomeBannerSummary {
+  const HomeBannerSummary({
+    required this.id,
+    this.title,
+    this.subtitle,
+    this.imageUrl,
+    this.linkedCategoryId,
+    this.linkedProductId,
+    this.deepLinkUrl,
+  });
+
+  final int id;
+  final String? title;
+  final String? subtitle;
+  final String? imageUrl;
+  final int? linkedCategoryId;
+  final int? linkedProductId;
+  final String? deepLinkUrl;
+
+  factory HomeBannerSummary.fromJson(Map<String, dynamic> json) {
+    return HomeBannerSummary(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      title: _ApiModelParser.toStringValue(json['title']),
+      subtitle: _ApiModelParser.toStringValue(json['subtitle']),
+      imageUrl: _ApiModelParser.toStringValue(json['imageUrl']),
+      linkedCategoryId: _ApiModelParser.toInt(json['linkedCategoryId']),
+      linkedProductId: _ApiModelParser.toInt(json['linkedProductId']),
+      deepLinkUrl: _ApiModelParser.toStringValue(json['deepLinkUrl']),
+    );
+  }
+}
+
+class HomeCategoryPill {
+  const HomeCategoryPill({
+    required this.id,
+    required this.name,
+    this.iconUrl,
+    this.sortOrder,
+  });
+
+  final int id;
+  final String name;
+  final String? iconUrl;
+  final int? sortOrder;
+
+  factory HomeCategoryPill.fromJson(Map<String, dynamic> json) {
+    return HomeCategoryPill(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      name: _ApiModelParser.toStringValue(json['name']) ?? '',
+      iconUrl: _ApiModelParser.toStringValue(json['iconUrl']),
+      sortOrder: _ApiModelParser.toInt(json['sortOrder']),
+    );
+  }
+}
+
+class HomeSubCategory {
+  const HomeSubCategory({required this.id, required this.name, this.iconUrl});
+
+  final int id;
+  final String name;
+  final String? iconUrl;
+
+  factory HomeSubCategory.fromJson(Map<String, dynamic> json) {
+    return HomeSubCategory(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      name: _ApiModelParser.toStringValue(json['name']) ?? '',
+      iconUrl: _ApiModelParser.toStringValue(json['iconUrl']),
+    );
+  }
+}
+
+class HomeSection {
+  const HomeSection({
+    this.categoryId,
+    this.title,
+    this.subCategories = const [],
+    this.products = const [],
+    this.viewAllLink,
+    this.offerBanner,
+  });
+
+  final int? categoryId;
+  final String? title;
+  final List<HomeSubCategory> subCategories;
+  final List<ProductSummary> products;
+  final String? viewAllLink;
+  final String? offerBanner;
+
+  factory HomeSection.fromJson(Map<String, dynamic> json) {
+    return HomeSection(
+      categoryId: _ApiModelParser.toInt(json['categoryId']),
+      title: _ApiModelParser.toStringValue(json['title']),
+      subCategories: _ApiModelParser.toMapList(
+        json['subCategories'],
+      ).map(HomeSubCategory.fromJson).toList(),
+      products: _ApiModelParser.toMapList(
+        json['products'],
+      ).map(ProductSummary.fromJson).toList(),
+      viewAllLink: _ApiModelParser.toStringValue(json['viewAllLink']),
+      offerBanner: _ApiModelParser.toStringValue(json['offerBanner']),
+    );
+  }
+}
+
+class HomeSectionsData {
+  const HomeSectionsData({
+    this.nearestShop,
+    this.banners = const [],
+    this.categoryPills = const [],
+    this.sections = const [],
+    this.deliveryZone,
+  });
+
+  final String? nearestShop;
+  final List<HomeBannerSummary> banners;
+  final List<HomeCategoryPill> categoryPills;
+  final List<HomeSection> sections;
+  final PincodeCheckData? deliveryZone;
+
+  factory HomeSectionsData.fromJson(Map<String, dynamic> json) {
+    return HomeSectionsData(
+      nearestShop: _ApiModelParser.toStringValue(json['nearestShop']),
+      banners: _ApiModelParser.toMapList(
+        json['banners'],
+      ).map(HomeBannerSummary.fromJson).toList(),
+      categoryPills: _ApiModelParser.toMapList(
+        json['categoryPills'],
+      ).map(HomeCategoryPill.fromJson).toList(),
+      sections: _ApiModelParser.toMapList(
+        json['sections'],
+      ).map(HomeSection.fromJson).toList(),
+      deliveryZone: _ApiModelParser.toMap(json['deliveryZone']) == null
+          ? null
+          : PincodeCheckData.fromJson(
+              _ApiModelParser.toMap(json['deliveryZone'])!,
+            ),
+    );
+  }
+}
+
+class HomeSectionsApiResponse {
+  const HomeSectionsApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.data,
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final HomeSectionsData? data;
+  final List<String> errors;
+
+  factory HomeSectionsApiResponse.fromHttp(int statusCode, String rawBody) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final dataMap = _ApiModelParser.toMap(payload?['data']);
+    return HomeSectionsApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      data: dataMap == null ? null : HomeSectionsData.fromJson(dataMap),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
+class HomeSearchData {
+  const HomeSearchData({
+    this.query,
+    this.totalProducts,
+    this.products = const [],
+    this.categories = const [],
+  });
+
+  final String? query;
+  final int? totalProducts;
+  final List<ProductSummary> products;
+  final List<HomeCategoryPill> categories;
+
+  factory HomeSearchData.fromJson(Map<String, dynamic> json) {
+    return HomeSearchData(
+      query: _ApiModelParser.toStringValue(json['query']),
+      totalProducts: _ApiModelParser.toInt(json['totalProducts']),
+      products: _ApiModelParser.toMapList(
+        json['products'],
+      ).map(ProductSummary.fromJson).toList(),
+      categories: _ApiModelParser.toMapList(
+        json['categories'],
+      ).map(HomeCategoryPill.fromJson).toList(),
+    );
+  }
+}
+
+class HomeSearchApiResponse {
+  const HomeSearchApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.data,
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final HomeSearchData? data;
+  final List<String> errors;
+
+  factory HomeSearchApiResponse.fromHttp(int statusCode, String rawBody) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final dataMap = _ApiModelParser.toMap(payload?['data']);
+
+    return HomeSearchApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      data: dataMap == null ? null : HomeSearchData.fromJson(dataMap),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
   }
 }
 
@@ -148,7 +387,7 @@ class CategorySummary {
       bannerUrl: _ApiModelParser.toStringValue(json['bannerUrl']),
       sortOrder: _ApiModelParser.toInt(json['sortOrder']),
       productCount: _ApiModelParser.toInt(json['productCount']),
-      subCategories: _ApiModelParser.toStringList(json['subCategories']),
+      subCategories: _ApiModelParser.toSubCategoryNames(json['subCategories']),
     );
   }
 }
@@ -198,6 +437,121 @@ class CategoryDetailsApiResponse {
       isSuccess: statusCode >= 200 && statusCode < 300,
       message: _ApiModelParser.extractMessage(payload),
       data: map == null ? null : CategorySummary.fromJson(map),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
+class CategoryProductsData {
+  const CategoryProductsData({
+    this.categoryId,
+    this.categoryName,
+    this.categoryBannerUrl,
+    this.subCategories = const [],
+    this.products,
+    this.offerBanner,
+  });
+
+  final int? categoryId;
+  final String? categoryName;
+  final String? categoryBannerUrl;
+  final List<HomeSubCategory> subCategories;
+  final ProductsPageData? products;
+  final String? offerBanner;
+
+  factory CategoryProductsData.fromJson(Map<String, dynamic> json) {
+    return CategoryProductsData(
+      categoryId: _ApiModelParser.toInt(json['categoryId']),
+      categoryName: _ApiModelParser.toStringValue(json['categoryName']),
+      categoryBannerUrl: _ApiModelParser.toStringValue(
+        json['categoryBannerUrl'],
+      ),
+      subCategories: _ApiModelParser.toMapList(
+        json['subCategories'],
+      ).map(HomeSubCategory.fromJson).toList(),
+      products: _ApiModelParser.toMap(json['products']) == null
+          ? null
+          : ProductsPageData.fromJson(_ApiModelParser.toMap(json['products'])!),
+      offerBanner: _ApiModelParser.toStringValue(json['offerBanner']),
+    );
+  }
+}
+
+class CategoryProductsApiResponse {
+  const CategoryProductsApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.data,
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final CategoryProductsData? data;
+  final List<String> errors;
+
+  factory CategoryProductsApiResponse.fromHttp(int statusCode, String rawBody) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final dataMap = _ApiModelParser.toMap(payload?['data']);
+
+    return CategoryProductsApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      data: dataMap == null ? null : CategoryProductsData.fromJson(dataMap),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
+class CategoryTreeNode {
+  const CategoryTreeNode({
+    required this.id,
+    required this.name,
+    this.iconUrl,
+    this.productCount,
+    this.children = const [],
+  });
+
+  final int id;
+  final String name;
+  final String? iconUrl;
+  final int? productCount;
+  final List<CategoryTreeNode> children;
+
+  factory CategoryTreeNode.fromJson(Map<String, dynamic> json) {
+    return CategoryTreeNode(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      name: _ApiModelParser.toStringValue(json['name']) ?? '',
+      iconUrl: _ApiModelParser.toStringValue(json['iconUrl']),
+      productCount: _ApiModelParser.toInt(json['productCount']),
+      children: _ApiModelParser.toMapList(
+        json['children'],
+      ).map(CategoryTreeNode.fromJson).toList(),
+    );
+  }
+}
+
+class CategoriesTreeApiResponse {
+  const CategoriesTreeApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.data = const [],
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final List<CategoryTreeNode> data;
+  final List<String> errors;
+
+  factory CategoriesTreeApiResponse.fromHttp(int statusCode, String rawBody) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final list = _ApiModelParser.toMapList(payload?['data']);
+
+    return CategoriesTreeApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      data: list.map(CategoryTreeNode.fromJson).toList(),
       errors: _ApiModelParser.toStringList(payload?['errors']),
     );
   }
@@ -1098,6 +1452,35 @@ class _ApiModelParser {
       return const [];
     }
     return value.map((e) => e.toString()).toList();
+  }
+
+  static List<String> toSubCategoryNames(dynamic value) {
+    if (value is! List) {
+      return const [];
+    }
+
+    final names = <String>[];
+    for (final item in value) {
+      if (item == null) {
+        continue;
+      }
+      if (item is String && item.trim().isNotEmpty) {
+        names.add(item.trim());
+        continue;
+      }
+      if (item is Map<String, dynamic>) {
+        final candidate = pickFirstString(item, const [
+          'name',
+          'nameEn',
+          'title',
+          'label',
+        ]);
+        if (candidate != null && candidate.trim().isNotEmpty) {
+          names.add(candidate.trim());
+        }
+      }
+    }
+    return names;
   }
 
   static String? toStringValue(dynamic value) {

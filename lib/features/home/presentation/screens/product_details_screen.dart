@@ -4,7 +4,9 @@ import 'package:babai_bazor_app/core/constants/api_constants.dart';
 import 'package:babai_bazor_app/core/localization/app_language_scope.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/core/models/api_models.dart';
+import 'package:babai_bazor_app/core/services/auth_session_service.dart';
 import 'package:babai_bazor_app/core/services/cart_service.dart';
+import 'package:babai_bazor_app/features/auth/presentation/screens/login_required_screen.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/cart_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -119,6 +121,22 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       return;
     }
 
+    final token = await AuthSessionService.instance.getToken();
+    if (token == null || token.trim().isEmpty) {
+      if (!mounted) {
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => LoginRequiredScreen(
+            language: _activeLanguage,
+            message: 'Login is required to add products to cart.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final normalizedQty = qty < 0 ? 0 : qty;
 
     setState(() {
@@ -206,7 +224,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Image.network(
-                        product.imageUrl!,
+                        ApiConstants.resolveMediaUrl(product.imageUrl),
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) =>
                             const Icon(Icons.image_not_supported_outlined),
