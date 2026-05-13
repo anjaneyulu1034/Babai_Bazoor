@@ -36,6 +36,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   bool _isUpdatingCart = false;
   int _qty = 0;
 
+  String? _productMediaUrl(ProductSummary product) {
+    final candidates = [product.imageUrl, product.image2Url, product.image3Url];
+    for (final raw in candidates) {
+      final value = raw?.trim() ?? '';
+      if (value.isNotEmpty) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   String get _effectivePincode {
     final p = widget.pincode?.trim();
     if (p == null || p.isEmpty) {
@@ -63,10 +74,22 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   Future<void> _load() async {
     try {
+      final token = await AuthSessionService.instance.getToken();
+      final headers = <String, String>{
+        ApiHeaders.acceptLanguage: _activeLanguage.code,
+      };
+      if (token != null && token.trim().isNotEmpty) {
+        headers[ApiHeaders.authorization] =
+            '${ApiHeaders.bearerPrefix}${token.trim()}';
+      }
+
       final response = await http
           .get(
-            ProductApiEndpoints.details(widget.productId),
-            headers: {ApiHeaders.acceptLanguage: _activeLanguage.code},
+            ProductApiEndpoints.details(
+              widget.productId,
+              languageCode: _activeLanguage.code,
+            ),
+            headers: headers,
           )
           .timeout(const Duration(seconds: 15));
 
@@ -143,14 +166,25 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       _isUpdatingCart = true;
     });
 
-    final parsed = await _cartService.updateCart(
-      language: _activeLanguage,
-      pincode: _effectivePincode,
-      request: CartUpdateRequest(
-        productId: widget.productId,
-        quantity: normalizedQty,
-      ),
+    final request = CartUpdateRequest(
+      productId: widget.productId,
+      quantity: normalizedQty,
     );
+
+    final parsed = normalizedQty > _qty
+        ? await _cartService.addToCart(
+            language: _activeLanguage,
+            pincode: _effectivePincode,
+            request: CartUpdateRequest(
+              productId: widget.productId,
+              quantity: normalizedQty - _qty,
+            ),
+          )
+        : await _cartService.updateCart(
+            language: _activeLanguage,
+            pincode: _effectivePincode,
+            request: request,
+          );
 
     if (!mounted) {
       return;
@@ -161,9 +195,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           .where((item) => item.productId == widget.productId)
           .cast<CartItemModel?>()
           .firstWhere((item) => item != null, orElse: () => null);
-      final updatedQty = match?.quantity ?? normalizedQty;
+      var updatedQty = match?.quantity;
+      if (updatedQty == null) {
+        await _loadCurrentCartQty();
+        updatedQty = _qty;
+      }
       setState(() {
-        _qty = updatedQty;
+        _qty = updatedQty ?? normalizedQty;
       });
 
       if (openCartOnSuccess && updatedQty > 0 && mounted) {
@@ -203,11 +241,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       return const Scaffold(body: Center(child: Text('Product not found')));
     }
 
+    final mediaUrl = _productMediaUrl(product);
+    final emoji = product.emoji?.trim();
+    final hasEmoji = emoji != null && emoji.isNotEmpty;
+    final displayName = product.localizedName(_activeLanguage);
+    final displayUnit = product.localizedUnit(_activeLanguage);
     final price = product.price?.toStringAsFixed(0) ?? '-';
     final mrp = product.mrpPrice?.toStringAsFixed(0);
 
     return Scaffold(
-      appBar: AppBar(title: Text(product.name)),
+      appBar: AppBar(title: Text(displayName)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -220,21 +263,32 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 color: const Color(0xFFF2F2F2),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: (product.imageUrl != null && product.imageUrl!.isNotEmpty)
+              child: (mediaUrl != null)
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Image.network(
-                        ApiConstants.resolveMediaUrl(product.imageUrl),
+                        ApiConstants.resolveMediaUrl(mediaUrl),
                         fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.image_not_supported_outlined),
+                        errorBuilder: (context, error, stackTrace) => hasEmoji
+                            ? Text(
+                                emoji,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 82),
+                              )
+                            : const Icon(Icons.image_not_supported_outlined),
                       ),
+                    )
+                  : hasEmoji
+                  ? Text(
+                      emoji,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 82),
                     )
                   : const Icon(Icons.shopping_basket_outlined, size: 68),
             ),
             const SizedBox(height: 16),
             Text(
-              product.name,
+              displayName,
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
@@ -260,10 +314,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 ],
               ],
             ),
-            if ((product.unit ?? '').isNotEmpty) ...[
+            if ((displayUnit ?? '').isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(
-                product.unit!,
+                displayUnit!,
                 style: const TextStyle(
                   fontSize: 14,
                   color: Color(0xFF5A5A5A),

@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 
 class PaymentSuccessScreen extends StatelessWidget {
-  const PaymentSuccessScreen({super.key, required this.amount});
+  const PaymentSuccessScreen({
+    super.key,
+    required this.amount,
+    this.title = 'Payment Successful',
+    this.subtitle,
+    this.buttonText = 'Done',
+  });
 
   final double amount;
+  final String title;
+  final String? subtitle;
+  final String buttonText;
 
   String _money(num value) => 'Rs ${value.toStringAsFixed(0)}';
 
@@ -47,13 +56,13 @@ class PaymentSuccessScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
-                    'Payment Successful',
+                  Text(
+                    title,
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Amount Paid: ${_money(amount)}',
+                    subtitle ?? 'Amount Paid: ${_money(amount)}',
                     style: const TextStyle(
                       color: Color(0xFF5F6368),
                       fontWeight: FontWeight.w600,
@@ -63,7 +72,7 @@ class PaymentSuccessScreen extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(context).pop(true),
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size.fromHeight(50),
                         backgroundColor: const Color(0xFF101010),
@@ -72,7 +81,7 @@ class PaymentSuccessScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      child: const Text('Done'),
+                      child: Text(buttonText),
                     ),
                   ),
                 ],

@@ -3,14 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:babai_bazor_app/core/constants/api_constants.dart';
-import 'package:babai_bazor_app/core/constants/app_colors.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/core/models/api_models.dart';
 import 'package:babai_bazor_app/features/auth/presentation/screens/otp_verification_screen.dart';
-import 'package:babai_bazor_app/features/home/presentation/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
 class MobileLoginScreen extends StatefulWidget {
@@ -28,8 +25,6 @@ class MobileLoginScreen extends StatefulWidget {
 }
 
 class _MobileLoginScreenState extends State<MobileLoginScreen> {
-  static const String _mapsApiKey = 'AIzaSyAT3wIjV73qVXPAlgkyifnns38GztnbNF4';
-
   final TextEditingController _phoneController = TextEditingController();
   late AppLanguage _screenLanguage;
   bool _isSendingOtp = false;
@@ -66,119 +61,6 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
     super.dispose();
   }
 
-  Future<Map<String, String>?> _resolveCurrentLocation() async {
-    final t = AppLocalizations.tr;
-
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
-        await _showErrorDialog(t(_screenLanguage, 'location_service_disabled'));
-      }
-      return null;
-    }
-
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      if (mounted) {
-        await _showErrorDialog(
-          t(_screenLanguage, 'location_permission_denied'),
-        );
-      }
-      return null;
-    }
-
-    final position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-
-    final uri = Uri.parse(
-      'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$_mapsApiKey',
-    );
-    final response = await http.get(uri).timeout(const Duration(seconds: 15));
-
-    if (response.statusCode != 200) {
-      if (mounted) {
-        await _showErrorDialog(t(_screenLanguage, 'location_fetch_failed'));
-      }
-      return null;
-    }
-
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final status = body['status']?.toString() ?? '';
-    final results = body['results'] as List<dynamic>?;
-
-    if (status != 'OK' || results == null || results.isEmpty) {
-      if (mounted) {
-        await _showErrorDialog(t(_screenLanguage, 'location_not_found'));
-      }
-      return null;
-    }
-
-    final first = results.first as Map<String, dynamic>;
-    final formattedAddress = first['formatted_address']?.toString() ?? '';
-    final components =
-        first['address_components'] as List<dynamic>? ?? const [];
-
-    String pincode = '';
-    for (final item in components) {
-      final map = item as Map<String, dynamic>;
-      final types = (map['types'] as List<dynamic>? ?? const [])
-          .map((e) => e.toString())
-          .toList();
-      if (types.contains('postal_code')) {
-        pincode = map['long_name']?.toString() ?? '';
-        break;
-      }
-    }
-
-    if (pincode.trim().length != 6) {
-      if (mounted) {
-        await _showErrorDialog(t(_screenLanguage, 'location_not_found'));
-      }
-      return null;
-    }
-
-    return {'pincode': pincode.trim(), 'location': formattedAddress};
-  }
-
-  Future<bool> _checkPincode(String pincode) async {
-    final t = AppLocalizations.tr;
-
-    final response = await http
-        .post(
-          LocationApiEndpoints.checkPincode(),
-          headers: {
-            ApiHeaders.contentType: ApiHeaders.applicationJson,
-            ApiHeaders.acceptLanguage: _screenLanguage.code,
-          },
-          body: jsonEncode({'pincode': pincode}),
-        )
-        .timeout(const Duration(seconds: 15));
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      String message = t(_screenLanguage, 'location_not_serviceable');
-      try {
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
-        final apiMessage = body['message']?.toString();
-        if (apiMessage != null && apiMessage.trim().isNotEmpty) {
-          message = apiMessage.trim();
-        }
-      } catch (_) {}
-
-      if (mounted) {
-        await _showErrorDialog(message);
-      }
-      return false;
-    }
-
-    return true;
-  }
-
   Future<void> _goToOtp() async {
     final t = AppLocalizations.tr;
     final phone = _phoneController.text.trim();
@@ -206,23 +88,6 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
     });
 
     try {
-      _log('Resolving current location and pincode.');
-      final locationData = await _resolveCurrentLocation();
-      if (locationData == null) {
-        _log('Aborted: unable to resolve current location/pincode.');
-        return;
-      }
-
-      final pincode = locationData['pincode']!;
-      final currentLocation = locationData['location'];
-
-      _log('Checking pincode serviceability. pincode=$pincode');
-      final serviceable = await _checkPincode(pincode);
-      if (!serviceable) {
-        _log('Aborted: pincode not serviceable.');
-        return;
-      }
-
       _log('Sending OTP request to ${AuthApiEndpoints.sendOtp()}');
       final response = await http
           .post(
@@ -231,11 +96,7 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
               ApiHeaders.contentType: ApiHeaders.applicationJson,
               ApiHeaders.acceptLanguage: _screenLanguage.code,
             },
-            body: jsonEncode({
-              'mobile': phone,
-              'pincode': pincode,
-              'location': currentLocation,
-            }),
+            body: jsonEncode({'phone': phone}),
           )
           .timeout(const Duration(seconds: 15));
 
@@ -268,7 +129,6 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
               language: _screenLanguage,
               phoneNumber: phone,
               prefilledOtp: prefilledOtp,
-              deliveryLocation: currentLocation,
             ),
           ),
         );
@@ -335,226 +195,334 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
     );
   }
 
-  void _continueAsGuest() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => HomeScreen(
-          language: _screenLanguage,
-          currentLocation: 'Guest Mode',
-        ),
-      ),
-      (route) => false,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.tr;
     final mq = MediaQuery.of(context);
+    final canSendOtp =
+        !_isSendingOtp && _phoneController.text.trim().length == 10;
 
     return Scaffold(
-      backgroundColor: AppColors.primaryOrange,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-              child: Row(
-                children: [
-                  const Spacer(),
-                  TextButton(
-                    onPressed: _isSendingOtp ? null : _continueAsGuest,
-                    child: Text(
-                      t(_screenLanguage, 'skip'),
+      backgroundColor: const Color(0xFFF4F4F6),
+      body: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: mq.size.height),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.fromLTRB(34, 12 + mq.padding.top, 34, 42),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFF7F2620),
+                      Color(0xFFAA2F14),
+                      Color(0xFFE63E00),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(52),
+                    bottomRight: Radius.circular(52),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.waving_hand_rounded,
+                      color: Color(0xFFFFC107),
+                      size: 40,
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      t(_screenLanguage, 'login_welcome_to'),
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: Color(0xFFF8EFE8),
+                        fontSize: 30,
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
+                        fontFamily: 'serif',
+                        height: 1.08,
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  Text(
-                    t(AppLanguage.en, 'login_welcome_title'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 34,
-                      height: 1.05,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Babai Bazaar',
+                      style: TextStyle(
+                        color: Color(0xFFFFBE0A),
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'serif',
+                        height: 1.05,
+                      ),
                     ),
-                  ),
-                  if (_screenLanguage == AppLanguage.te) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 18),
                     Text(
-                      t(AppLanguage.te, 'login_welcome_title'),
-                      textAlign: TextAlign.center,
+                      t(_screenLanguage, 'login_or_signup_continue'),
                       style: const TextStyle(
-                        fontSize: 20,
-                        height: 1,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: Color(0xFFD8BFB4),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(28),
-                    topRight: Radius.circular(28),
-                  ),
                 ),
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    20,
-                    22,
-                    20,
-                    20 + mq.padding.bottom,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        t(_screenLanguage, 'mobile_number'),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF525252),
-                        ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  34,
+                  28,
+                  34,
+                  24 + mq.padding.bottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t(_screenLanguage, 'enter_mobile_number'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0C1633),
                       ),
-                      const SizedBox(height: 10),
-                      Row(
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      t(_screenLanguage, 'login_otp_hint'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF8A93AB),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE9E9EF),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFD9D9E2)),
+                      ),
+                      child: Row(
                         children: [
                           Container(
-                            height: 54,
-                            width: 62,
+                            height: 70,
+                            width: 96,
                             alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF5F5F5),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: AppColors.border),
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                right: BorderSide(color: Color(0xFFD9D9E2)),
+                              ),
                             ),
                             child: const Text(
-                              '+91',
+                              'IN +91',
                               style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0D1330),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
                           Expanded(
-                            child: Container(
-                              height: 54,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: const Color(0xFFE4E4E4),
-                                  width: 1.4,
-                                ),
+                            child: TextField(
+                              controller: _phoneController,
+                              keyboardType: TextInputType.phone,
+                              enableSuggestions: false,
+                              autocorrect: false,
+                              onChanged: (_) => setState(() {}),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              maxLength: 10,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 3,
+                                color: Color(0xFF919AAF),
                               ),
-                              child: TextField(
-                                controller: _phoneController,
-                                keyboardType: TextInputType.phone,
-                                enableSuggestions: false,
-                                autocorrect: false,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                maxLength: 10,
-                                style: const TextStyle(
+                              decoration: const InputDecoration(
+                                hintText: '98765 43210',
+                                hintStyle: TextStyle(
+                                  color: Color(0xFF919AAF),
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.6,
+                                  letterSpacing: 3,
                                 ),
-                                decoration: const InputDecoration(
-                                  hintText: '9XXXXXXXXX',
-                                  hintStyle: TextStyle(
-                                    color: AppColors.textMuted,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  border: InputBorder.none,
-                                  counterText: '',
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 9,
-                                  ),
+                                border: InputBorder.none,
+                                counterText: '',
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 16,
                                 ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 18),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF101010),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(52),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            textStyle: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: canSendOtp
+                              ? const Color(0xFFEC3A03)
+                              : const Color(0xFFD7D7E1),
+                          foregroundColor: canSendOtp
+                              ? Colors.white
+                              : const Color(0xFF8A93AB),
+                          minimumSize: const Size.fromHeight(68),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        onPressed: canSendOtp ? _goToOtp : null,
+                        child: _isSendingOtp
+                            ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(t(_screenLanguage, 'sending_otp')),
+                                ],
+                              )
+                            : Text(t(_screenLanguage, 'get_otp')),
+                      ),
+                    ),
+                    const SizedBox(height: 26),
+                    Row(
+                      children: [
+                        Expanded(child: Divider(color: Color(0xFFD8D8E2))),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            t(_screenLanguage, 'or_continue_with'),
+                            style: const TextStyle(
+                              color: Color(0xFF8A93AB),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          onPressed: _isSendingOtp ? null : _goToOtp,
-                          child: _isSendingOtp
-                              ? Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Text(t(_screenLanguage, 'sending_otp')),
-                                  ],
-                                )
-                              : Text(t(_screenLanguage, 'get_otp')),
+                        ),
+                        Expanded(child: Divider(color: Color(0xFFD8D8E2))),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                t(_screenLanguage, 'google_login_soon'),
+                              ),
+                            ),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(68),
+                          side: const BorderSide(color: Color(0xFFD8D8E2)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          backgroundColor: Colors.white,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Text(
+                              'G',
+                              style: TextStyle(
+                                color: Color(0xFF4285F4),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      Center(
-                        child: Text(
-                          t(_screenLanguage, 'no_password'),
-                          textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    Center(
+                      child: Text(
+                        t(_screenLanguage, 'continue_with_google'),
+                        style: const TextStyle(
+                          color: Color(0xFF0D1330),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Text(
+                          t(_screenLanguage, 'choose_language_inline'),
                           style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textMuted,
+                            color: Color(0xFF8A93AB),
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFD8D8E2)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<AppLanguage>(
+                              value: _screenLanguage,
+                              isDense: true,
+                              style: const TextStyle(
+                                color: Color(0xFF0D1330),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              items: [
+                                DropdownMenuItem<AppLanguage>(
+                                  value: AppLanguage.en,
+                                  child: Text(t(_screenLanguage, 'english')),
+                                ),
+                                DropdownMenuItem<AppLanguage>(
+                                  value: AppLanguage.te,
+                                  child: Text(t(_screenLanguage, 'telugu')),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value == null || value == _screenLanguage) {
+                                  return;
+                                }
+                                setState(() {
+                                  _screenLanguage = value;
+                                });
+                                widget.onLanguageChanged(value);
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

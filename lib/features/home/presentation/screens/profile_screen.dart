@@ -19,6 +19,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final ProfileService _profileService = const ProfileService();
   late AppLanguage _activeLanguage;
 
+  String _t(String key) => AppLocalizations.tr(_activeLanguage, key);
+
   bool _isLoading = true;
   bool _isBusy = false;
   String? _inlineError;
@@ -75,13 +77,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (second != null && second.trim().isNotEmpty) {
       return second.trim();
     }
-    return 'Request completed.';
+    return _t('request_completed');
   }
 
   String get _displayName {
     final name = _profile?.name?.trim();
     if (name == null || name.isEmpty) {
-      return 'Guest';
+      return _t('guest');
     }
     return name;
   }
@@ -107,7 +109,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message?.trim().isNotEmpty == true ? message! : 'Done'),
+        content: Text(
+          message?.trim().isNotEmpty == true ? message! : _t('done'),
+        ),
       ),
     );
   }
@@ -125,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Edit Profile'),
+          title: Text(_t('profile_edit_profile')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -221,7 +225,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+              child: Text(_t('profile_cancel')),
             ),
             ElevatedButton(
               onPressed: () {
@@ -230,7 +234,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 }
                 Navigator.of(context).pop(true);
               },
-              child: const Text('Update'),
+              child: Text(_t('profile_update')),
             ),
           ],
         );
@@ -268,7 +272,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     });
 
-    _showMessage(response.message ?? 'Profile updated successfully');
+    _showMessage(response.message ?? _t('profile_updated_success'));
   }
 
   Future<void> _showAddAddressDialog() async {
@@ -295,7 +299,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return StatefulBuilder(
           builder: (context, setLocalState) {
             return AlertDialog(
-              title: const Text('Add Address'),
+              title: Text(_t('profile_add_address')),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -499,7 +503,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(_t('profile_cancel')),
                 ),
                 ElevatedButton(
                   onPressed: () {
@@ -508,7 +512,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }
                     Navigator.of(context).pop(true);
                   },
-                  child: const Text('Add'),
+                  child: Text(_t('profile_add')),
                 ),
               ],
             );
@@ -566,7 +570,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await _load();
     }
 
-    _showMessage(response.message ?? 'Address added successfully');
+    _showMessage(response.message ?? _t('profile_address_added_success'));
   }
 
   Future<void> _deleteAddress(AddressModel address) async {
@@ -578,18 +582,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Delete Address'),
+          title: Text(_t('profile_delete_address')),
           content: Text(
-            'Are you sure you want to delete ${address.label ?? 'this address'}?',
+            '${_t('profile_delete_confirm')} ${address.label ?? _t('profile_address_fallback')}?',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+              child: Text(_t('profile_cancel')),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete'),
+              child: Text(_t('profile_delete')),
             ),
           ],
         );
@@ -620,7 +624,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     });
 
-    _showMessage(response.message ?? 'Address deleted');
+    _showMessage(response.message ?? _t('profile_address_deleted'));
   }
 
   Widget _buildProfileCard() {
@@ -670,8 +674,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: Colors.white.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text(
-                    'Customer Profile',
+                  child: Text(
+                    _t('profile_customer_profile'),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -721,18 +725,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           borderRadius: BorderRadius.circular(18),
           border: Border.all(color: AppColors.border),
         ),
-        child: const Column(
+        child: Column(
           children: [
-            Icon(
+            const Icon(
               Icons.location_off_outlined,
               color: AppColors.textMuted,
               size: 34,
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
-              'No saved addresses yet. Tap Add to create one.',
+              _t('profile_no_saved_addresses'),
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
           ],
         ),
@@ -794,7 +798,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  address.label ?? 'Address',
+                                  address.label ??
+                                      _t('profile_address_fallback'),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w800,
                                     fontSize: 15,
@@ -810,7 +815,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   Icons.delete_outline,
                                   color: Colors.redAccent,
                                 ),
-                                tooltip: 'Delete',
+                                tooltip: _t('profile_delete'),
                               ),
                             ],
                           ),
@@ -839,7 +844,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  'PIN ${address.pincode ?? '-'}',
+                                  '${_t('profile_pin_prefix')} ${address.pincode ?? '-'}',
                                   style: const TextStyle(
                                     color: AppColors.textMuted,
                                     fontWeight: FontWeight.w700,
@@ -858,8 +863,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     color: const Color(0xFFE8F6EE),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
-                                  child: const Text(
-                                    'Default',
+                                  child: Text(
+                                    _t('profile_default'),
                                     style: TextStyle(
                                       color: Color(0xFF1D7C4D),
                                       fontWeight: FontWeight.w700,
@@ -883,17 +888,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfileDetailsSection() {
     final rows = <MapEntry<String, String>>[
-      MapEntry('Name', _displayName),
+      MapEntry(_t('profile_name'), _displayName),
       MapEntry(
-        'Mobile',
+        _t('profile_mobile'),
         _profile?.mobile?.trim().isNotEmpty == true ? _profile!.mobile! : '-',
       ),
       MapEntry(
-        'Village',
+        _t('profile_village'),
         _profile?.village?.trim().isNotEmpty == true ? _profile!.village! : '-',
       ),
       MapEntry(
-        'Pincode',
+        _t('profile_pincode'),
         _profile?.pincode?.trim().isNotEmpty == true ? _profile!.pincode! : '-',
       ),
     ];
@@ -916,8 +921,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Profile Details',
+          Text(
+            _t('profile_profile_details'),
             style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 16,
@@ -965,7 +970,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F8F8),
       appBar: AppBar(
-        title: const Text('My Profile'),
+        title: Text(_t('profile_title')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -1027,10 +1032,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Saved Addresses',
-                          style: TextStyle(
+                          _t('profile_saved_addresses'),
+                          style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 17,
                             color: AppColors.textDark,
@@ -1040,7 +1045,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       TextButton.icon(
                         onPressed: _isBusy ? null : _showAddAddressDialog,
                         icon: const Icon(Icons.add_location_alt_outlined),
-                        label: const Text('Add'),
+                        label: Text(_t('profile_add')),
                       ),
                     ],
                   ),
@@ -1057,9 +1062,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: ElevatedButton.icon(
             onPressed: _isBusy ? null : _showUpdateProfileDialog,
             icon: const Icon(Icons.edit_outlined),
-            label: const Text(
-              'Edit Profile',
-              style: TextStyle(fontWeight: FontWeight.w700),
+            label: Text(
+              _t('profile_edit_profile'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryOrange,

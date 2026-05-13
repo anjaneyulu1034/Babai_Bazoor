@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:babai_bazor_app/core/localization/app_localizations.dart';
+
 class SendOtpApiResponse {
   const SendOtpApiResponse({
     required this.isSuccess,
@@ -68,15 +70,15 @@ class HomeApiResponse {
     }
 
     final data = payload['data'];
-    final dataMap = data is Map<String, dynamic> ? data : null;
+    final dataMap = data is Map<String, dynamic> ? data : payload;
     final banners = _ApiModelParser.toMapList(
-      dataMap?['banners'],
+      dataMap['banners'],
     ).map(HomeBannerSummary.fromJson).toList();
     final categories = _ApiModelParser.toMapList(
-      dataMap?['categories'],
+      dataMap['categories'],
     ).map(CategorySummary.fromJson).toList();
     final featuredProducts = _ApiModelParser.toMapList(
-      dataMap?['featuredProducts'],
+      dataMap['featuredProducts'],
     ).map(ProductSummary.fromJson).toList();
 
     final location =
@@ -163,7 +165,9 @@ class HomeBannerSummary {
       imageUrl: _ApiModelParser.toStringValue(json['imageUrl']),
       linkedCategoryId: _ApiModelParser.toInt(json['linkedCategoryId']),
       linkedProductId: _ApiModelParser.toInt(json['linkedProductId']),
-      deepLinkUrl: _ApiModelParser.toStringValue(json['deepLinkUrl']),
+      deepLinkUrl:
+          _ApiModelParser.toStringValue(json['deepLinkUrl']) ??
+          _ApiModelParser.toStringValue(json['deepLink']),
     );
   }
 }
@@ -172,38 +176,92 @@ class HomeCategoryPill {
   const HomeCategoryPill({
     required this.id,
     required this.name,
+    this.emoji,
+    this.nameEn,
+    this.nameTe,
     this.iconUrl,
     this.sortOrder,
   });
 
   final int id;
   final String name;
+  final String? emoji;
+  final String? nameEn;
+  final String? nameTe;
   final String? iconUrl;
   final int? sortOrder;
 
   factory HomeCategoryPill.fromJson(Map<String, dynamic> json) {
     return HomeCategoryPill(
       id: _ApiModelParser.toInt(json['id']) ?? 0,
-      name: _ApiModelParser.toStringValue(json['name']) ?? '',
+      name:
+          _ApiModelParser.toStringValue(json['name']) ??
+          _ApiModelParser.toStringValue(json['nameEn']) ??
+          _ApiModelParser.toStringValue(json['nameTe']) ??
+          '',
+      emoji: _ApiModelParser.toStringValue(json['emoji']),
+      nameEn: _ApiModelParser.toStringValue(json['nameEn']),
+      nameTe: _ApiModelParser.toStringValue(json['nameTe']),
       iconUrl: _ApiModelParser.toStringValue(json['iconUrl']),
       sortOrder: _ApiModelParser.toInt(json['sortOrder']),
     );
   }
+
+  String localizedName(AppLanguage language) {
+    final preferred = language == AppLanguage.te ? nameTe : nameEn;
+    if ((preferred ?? '').trim().isNotEmpty) {
+      return preferred!.trim();
+    }
+
+    final fallback = language == AppLanguage.te ? nameEn : nameTe;
+    if ((fallback ?? '').trim().isNotEmpty) {
+      return fallback!.trim();
+    }
+    return name;
+  }
 }
 
 class HomeSubCategory {
-  const HomeSubCategory({required this.id, required this.name, this.iconUrl});
+  const HomeSubCategory({
+    required this.id,
+    required this.name,
+    this.nameEn,
+    this.nameTe,
+    this.iconUrl,
+  });
 
   final int id;
   final String name;
+  final String? nameEn;
+  final String? nameTe;
   final String? iconUrl;
 
   factory HomeSubCategory.fromJson(Map<String, dynamic> json) {
     return HomeSubCategory(
       id: _ApiModelParser.toInt(json['id']) ?? 0,
-      name: _ApiModelParser.toStringValue(json['name']) ?? '',
+      name:
+          _ApiModelParser.toStringValue(json['name']) ??
+          _ApiModelParser.toStringValue(json['nameEn']) ??
+          _ApiModelParser.toStringValue(json['nameTe']) ??
+          _ApiModelParser.toStringValue(json['title']) ??
+          '',
+      nameEn: _ApiModelParser.toStringValue(json['nameEn']),
+      nameTe: _ApiModelParser.toStringValue(json['nameTe']),
       iconUrl: _ApiModelParser.toStringValue(json['iconUrl']),
     );
+  }
+
+  String localizedName(AppLanguage language) {
+    final preferred = language == AppLanguage.te ? nameTe : nameEn;
+    if ((preferred ?? '').trim().isNotEmpty) {
+      return preferred!.trim();
+    }
+
+    final fallback = language == AppLanguage.te ? nameEn : nameTe;
+    if ((fallback ?? '').trim().isNotEmpty) {
+      return fallback!.trim();
+    }
+    return name;
   }
 }
 
@@ -358,37 +416,62 @@ class CategorySummary {
   const CategorySummary({
     required this.id,
     required this.name,
+    this.emoji,
     this.nameEn,
     this.nameTe,
     this.iconUrl,
     this.bannerUrl,
     this.sortOrder,
     this.productCount,
+    this.subCategoryItems = const [],
     this.subCategories = const [],
   });
 
   final int id;
   final String name;
+  final String? emoji;
   final String? nameEn;
   final String? nameTe;
   final String? iconUrl;
   final String? bannerUrl;
   final int? sortOrder;
   final int? productCount;
+  final List<HomeSubCategory> subCategoryItems;
   final List<String> subCategories;
 
   factory CategorySummary.fromJson(Map<String, dynamic> json) {
     return CategorySummary(
       id: _ApiModelParser.toInt(json['id']) ?? 0,
-      name: _ApiModelParser.toStringValue(json['name']) ?? '',
+      name:
+          _ApiModelParser.toStringValue(json['name']) ??
+          _ApiModelParser.toStringValue(json['nameEn']) ??
+          _ApiModelParser.toStringValue(json['nameTe']) ??
+          '',
+      emoji: _ApiModelParser.toStringValue(json['emoji']),
       nameEn: _ApiModelParser.toStringValue(json['nameEn']),
       nameTe: _ApiModelParser.toStringValue(json['nameTe']),
       iconUrl: _ApiModelParser.toStringValue(json['iconUrl']),
       bannerUrl: _ApiModelParser.toStringValue(json['bannerUrl']),
       sortOrder: _ApiModelParser.toInt(json['sortOrder']),
       productCount: _ApiModelParser.toInt(json['productCount']),
+      subCategoryItems: _ApiModelParser.toMapList(
+        json['subCategories'],
+      ).map(HomeSubCategory.fromJson).toList(),
       subCategories: _ApiModelParser.toSubCategoryNames(json['subCategories']),
     );
+  }
+
+  String localizedName(AppLanguage language) {
+    final preferred = language == AppLanguage.te ? nameTe : nameEn;
+    if ((preferred ?? '').trim().isNotEmpty) {
+      return preferred!.trim();
+    }
+
+    final fallback = language == AppLanguage.te ? nameEn : nameTe;
+    if ((fallback ?? '').trim().isNotEmpty) {
+      return fallback!.trim();
+    }
+    return name;
   }
 }
 
@@ -407,7 +490,9 @@ class CategoriesListApiResponse {
 
   factory CategoriesListApiResponse.fromHttp(int statusCode, String rawBody) {
     final payload = _ApiModelParser.decodeObject(rawBody);
-    final list = _ApiModelParser.toMapList(payload?['data']);
+    final list = payload == null
+        ? _ApiModelParser.decodeMapList(rawBody)
+        : _ApiModelParser.toMapList(payload['data']);
     return CategoriesListApiResponse(
       isSuccess: statusCode >= 200 && statusCode < 300,
       message: _ApiModelParser.extractMessage(payload),
@@ -432,7 +517,9 @@ class CategoryDetailsApiResponse {
 
   factory CategoryDetailsApiResponse.fromHttp(int statusCode, String rawBody) {
     final payload = _ApiModelParser.decodeObject(rawBody);
-    final map = _ApiModelParser.toMap(payload?['data']);
+    final map = payload == null
+        ? _ApiModelParser.decodeObject(rawBody)
+        : (_ApiModelParser.toMap(payload['data']) ?? payload);
     return CategoryDetailsApiResponse(
       isSuccess: statusCode >= 200 && statusCode < 300,
       message: _ApiModelParser.extractMessage(payload),
@@ -460,6 +547,8 @@ class CategoryProductsData {
   final String? offerBanner;
 
   factory CategoryProductsData.fromJson(Map<String, dynamic> json) {
+    final productsMap = _ApiModelParser.toMap(json['products']);
+    final productsList = _ApiModelParser.toMapList(json['products']);
     return CategoryProductsData(
       categoryId: _ApiModelParser.toInt(json['categoryId']),
       categoryName: _ApiModelParser.toStringValue(json['categoryName']),
@@ -469,9 +558,13 @@ class CategoryProductsData {
       subCategories: _ApiModelParser.toMapList(
         json['subCategories'],
       ).map(HomeSubCategory.fromJson).toList(),
-      products: _ApiModelParser.toMap(json['products']) == null
-          ? null
-          : ProductsPageData.fromJson(_ApiModelParser.toMap(json['products'])!),
+      products: productsMap != null
+          ? ProductsPageData.fromJson(productsMap)
+          : (productsList.isNotEmpty
+                ? ProductsPageData(
+                    items: productsList.map(ProductSummary.fromJson).toList(),
+                  )
+                : null),
       offerBanner: _ApiModelParser.toStringValue(json['offerBanner']),
     );
   }
@@ -492,13 +585,35 @@ class CategoryProductsApiResponse {
 
   factory CategoryProductsApiResponse.fromHttp(int statusCode, String rawBody) {
     final payload = _ApiModelParser.decodeObject(rawBody);
-    final dataMap = _ApiModelParser.toMap(payload?['data']);
+    final dataMap = _ApiModelParser.toMap(payload?['data']) ?? payload;
 
     return CategoryProductsApiResponse(
       isSuccess: statusCode >= 200 && statusCode < 300,
       message: _ApiModelParser.extractMessage(payload),
-      data: dataMap == null ? null : CategoryProductsData.fromJson(dataMap),
+      data: dataMap == null || dataMap.isEmpty
+          ? null
+          : CategoryProductsData.fromJson(dataMap),
       errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+
+  factory CategoryProductsApiResponse.fromProductsHttp(
+    int statusCode,
+    String rawBody, {
+    required int categoryId,
+  }) {
+    final productsResponse = ProductsListApiResponse.fromHttp(
+      statusCode,
+      rawBody,
+    );
+    return CategoryProductsApiResponse(
+      isSuccess: productsResponse.isSuccess,
+      message: productsResponse.message,
+      data: CategoryProductsData(
+        categoryId: categoryId,
+        products: productsResponse.data,
+      ),
+      errors: productsResponse.errors,
     );
   }
 }
@@ -561,6 +676,7 @@ class ProductSummary {
   const ProductSummary({
     required this.id,
     required this.name,
+    this.emoji,
     this.nameEn,
     this.nameTe,
     this.description,
@@ -585,6 +701,7 @@ class ProductSummary {
 
   final int id;
   final String name;
+  final String? emoji;
   final String? nameEn;
   final String? nameTe;
   final String? description;
@@ -609,28 +726,84 @@ class ProductSummary {
   factory ProductSummary.fromJson(Map<String, dynamic> json) {
     return ProductSummary(
       id: _ApiModelParser.toInt(json['id']) ?? 0,
-      name: _ApiModelParser.toStringValue(json['name']) ?? '',
+      name:
+          _ApiModelParser.toStringValue(json['name']) ??
+          _ApiModelParser.toStringValue(json['nameEn']) ??
+          _ApiModelParser.toStringValue(json['nameTe']) ??
+          '',
+      emoji: _ApiModelParser.toStringValue(json['emoji']),
       nameEn: _ApiModelParser.toStringValue(json['nameEn']),
       nameTe: _ApiModelParser.toStringValue(json['nameTe']),
-      description: _ApiModelParser.toStringValue(json['description']),
+      description:
+          _ApiModelParser.toStringValue(json['description']) ??
+          _ApiModelParser.toStringValue(json['desc']),
       price: _ApiModelParser.toDouble(json['price']),
-      mrpPrice: _ApiModelParser.toDouble(json['mrpPrice']),
-      discountPct: _ApiModelParser.toDouble(json['discountPct']),
-      unit: _ApiModelParser.toStringValue(json['unit']),
+      mrpPrice:
+          _ApiModelParser.toDouble(json['mrpPrice']) ??
+          _ApiModelParser.toDouble(json['mrp']),
+      discountPct:
+          _ApiModelParser.toDouble(json['discountPct']) ??
+          _ApiModelParser.toDouble(json['discount']),
+      unit:
+          _ApiModelParser.toStringValue(json['unit']) ??
+          _ApiModelParser.toStringValue(json['weight']),
       unitEn: _ApiModelParser.toStringValue(json['unitEn']),
       unitTe: _ApiModelParser.toStringValue(json['unitTe']),
       stockQty: _ApiModelParser.toInt(json['stockQty']),
       inStock: _ApiModelParser.toBool(json['inStock']),
       minOrderQty: _ApiModelParser.toInt(json['minOrderQty']),
       maxOrderQty: _ApiModelParser.toInt(json['maxOrderQty']),
-      imageUrl: _ApiModelParser.toStringValue(json['imageUrl']),
-      image2Url: _ApiModelParser.toStringValue(json['image2Url']),
-      image3Url: _ApiModelParser.toStringValue(json['image3Url']),
+      imageUrl:
+          _ApiModelParser.toStringValue(json['imageUrl']) ??
+          _ApiModelParser.toStringValue(json['image']) ??
+          _ApiModelParser.toStringValue(json['thumbnail']) ??
+          _ApiModelParser.toStringValue(json['image1Url']),
+      image2Url:
+          _ApiModelParser.toStringValue(json['image2Url']) ??
+          _ApiModelParser.toStringValue(json['image2']),
+      image3Url:
+          _ApiModelParser.toStringValue(json['image3Url']) ??
+          _ApiModelParser.toStringValue(json['image3']),
       categoryId: _ApiModelParser.toInt(json['categoryId']),
       categoryName: _ApiModelParser.toStringValue(json['categoryName']),
-      brand: _ApiModelParser.toStringValue(json['brand']),
-      isFeatured: _ApiModelParser.toBool(json['isFeatured']),
+      brand:
+          _ApiModelParser.toStringValue(json['brand']) ??
+          _ApiModelParser.toStringValue(json['tag']),
+      isFeatured:
+          _ApiModelParser.toBool(json['isFeatured']) ??
+          _ApiModelParser.toBool(json['featured']),
     );
+  }
+
+  String localizedName(AppLanguage language) {
+    final preferred = language == AppLanguage.te ? nameTe : nameEn;
+    if ((preferred ?? '').trim().isNotEmpty) {
+      return preferred!.trim();
+    }
+
+    final fallback = language == AppLanguage.te ? nameEn : nameTe;
+    if ((fallback ?? '').trim().isNotEmpty) {
+      return fallback!.trim();
+    }
+    return name;
+  }
+
+  String? localizedUnit(AppLanguage language) {
+    final preferred = language == AppLanguage.te ? unitTe : unitEn;
+    if ((preferred ?? '').trim().isNotEmpty) {
+      return preferred!.trim();
+    }
+
+    final fallback = language == AppLanguage.te ? unitEn : unitTe;
+    if ((fallback ?? '').trim().isNotEmpty) {
+      return fallback!.trim();
+    }
+
+    final base = unit?.trim();
+    if (base != null && base.isNotEmpty) {
+      return base;
+    }
+    return null;
   }
 }
 
@@ -654,7 +827,9 @@ class ProductsPageData {
   final bool? hasPrev;
 
   factory ProductsPageData.fromJson(Map<String, dynamic> json) {
-    final list = _ApiModelParser.toMapList(json['items']);
+    final list = _ApiModelParser.toMapList(json['items']).isNotEmpty
+        ? _ApiModelParser.toMapList(json['items'])
+        : _ApiModelParser.toMapList(json['products']);
     return ProductsPageData(
       items: list.map(ProductSummary.fromJson).toList(),
       totalCount: _ApiModelParser.toInt(json['totalCount']),
@@ -682,12 +857,52 @@ class ProductsListApiResponse {
 
   factory ProductsListApiResponse.fromHttp(int statusCode, String rawBody) {
     final payload = _ApiModelParser.decodeObject(rawBody);
+    final directList = _ApiModelParser.decodeMapList(rawBody);
     final dataMap = _ApiModelParser.toMap(payload?['data']);
+    final dataList = _ApiModelParser.toMapList(payload?['data']);
+
+    ProductsPageData? parsedData;
+    if (dataMap != null) {
+      parsedData = ProductsPageData.fromJson(dataMap);
+    } else if (dataList.isNotEmpty) {
+      parsedData = ProductsPageData(
+        items: dataList.map(ProductSummary.fromJson).toList(),
+        totalCount:
+            _ApiModelParser.toInt(payload?['totalCount']) ??
+            _ApiModelParser.toInt(payload?['total']),
+        pageNumber:
+            _ApiModelParser.toInt(payload?['pageNumber']) ??
+            _ApiModelParser.toInt(payload?['page']),
+        pageSize: _ApiModelParser.toInt(payload?['pageSize']),
+      );
+    } else if (payload != null && payload.containsKey('items')) {
+      parsedData = ProductsPageData.fromJson(payload);
+    } else if (directList.isNotEmpty) {
+      parsedData = ProductsPageData(
+        items: directList.map(ProductSummary.fromJson).toList(),
+      );
+    } else {
+      final payloadProductList = payload == null
+          ? const <Map<String, dynamic>>[]
+          : _ApiModelParser.toMapList(payload['products']);
+      if (payloadProductList.isNotEmpty) {
+        parsedData = ProductsPageData(
+          items: payloadProductList.map(ProductSummary.fromJson).toList(),
+          totalCount:
+              _ApiModelParser.toInt(payload?['totalCount']) ??
+              _ApiModelParser.toInt(payload?['total']),
+          pageNumber:
+              _ApiModelParser.toInt(payload?['pageNumber']) ??
+              _ApiModelParser.toInt(payload?['page']),
+          pageSize: _ApiModelParser.toInt(payload?['pageSize']),
+        );
+      }
+    }
 
     return ProductsListApiResponse(
       isSuccess: statusCode >= 200 && statusCode < 300,
       message: _ApiModelParser.extractMessage(payload),
-      data: dataMap == null ? null : ProductsPageData.fromJson(dataMap),
+      data: parsedData,
       errors: _ApiModelParser.toStringList(payload?['errors']),
     );
   }
@@ -708,12 +923,12 @@ class ProductDetailsApiResponse {
 
   factory ProductDetailsApiResponse.fromHttp(int statusCode, String rawBody) {
     final payload = _ApiModelParser.decodeObject(rawBody);
-    final map = _ApiModelParser.toMap(payload?['data']);
+    final map = _ApiModelParser.toMap(payload?['data']) ?? payload;
 
     return ProductDetailsApiResponse(
       isSuccess: statusCode >= 200 && statusCode < 300,
       message: _ApiModelParser.extractMessage(payload),
-      data: map == null ? null : ProductSummary.fromJson(map),
+      data: map == null || map.isEmpty ? null : ProductSummary.fromJson(map),
       errors: _ApiModelParser.toStringList(payload?['errors']),
     );
   }
@@ -801,6 +1016,7 @@ class CartItemModel {
     this.cartItemId,
     this.productId,
     this.productName,
+    this.emoji,
     this.imageUrl,
     this.unitPrice,
     this.unit,
@@ -813,6 +1029,7 @@ class CartItemModel {
   final int? cartItemId;
   final int? productId;
   final String? productName;
+  final String? emoji;
   final String? imageUrl;
   final double? unitPrice;
   final String? unit;
@@ -822,16 +1039,65 @@ class CartItemModel {
   final bool? inStock;
 
   factory CartItemModel.fromJson(Map<String, dynamic> json) {
+    final productMap = _ApiModelParser.toMap(json['product']);
+    final resolvedCartItemId =
+        _ApiModelParser.toInt(json['cartItemId']) ??
+        _ApiModelParser.toInt(json['id']);
+    final resolvedProductId =
+        _ApiModelParser.toInt(json['productId']) ??
+        _ApiModelParser.toInt(json['productID']) ??
+        _ApiModelParser.toInt(json['itemProductId']) ??
+        _ApiModelParser.toInt(productMap?['productId']) ??
+        _ApiModelParser.toInt(productMap?['id']) ??
+        // Fall back to `id` only when this payload appears to be a direct product list.
+        (json.containsKey('cartItemId')
+            ? null
+            : _ApiModelParser.toInt(json['id']));
+
     return CartItemModel(
-      cartItemId: _ApiModelParser.toInt(json['cartItemId']),
-      productId: _ApiModelParser.toInt(json['productId']),
-      productName: _ApiModelParser.toStringValue(json['productName']),
-      imageUrl: _ApiModelParser.toStringValue(json['imageUrl']),
-      unitPrice: _ApiModelParser.toDouble(json['unitPrice']),
-      unit: _ApiModelParser.toStringValue(json['unit']),
-      quantity: _ApiModelParser.toInt(json['quantity']),
-      totalPrice: _ApiModelParser.toDouble(json['totalPrice']),
-      maxOrderQty: _ApiModelParser.toInt(json['maxOrderQty']),
+      cartItemId: resolvedCartItemId,
+      productId: resolvedProductId,
+      productName:
+          _ApiModelParser.toStringValue(json['productName']) ??
+          _ApiModelParser.toStringValue(json['name']) ??
+          _ApiModelParser.toStringValue(json['nameEn']) ??
+          _ApiModelParser.toStringValue(json['nameTe']) ??
+          _ApiModelParser.toStringValue(json['product_title']) ??
+          _ApiModelParser.toStringValue(productMap?['productName']) ??
+          _ApiModelParser.toStringValue(productMap?['name']) ??
+          _ApiModelParser.toStringValue(productMap?['nameEn']) ??
+          _ApiModelParser.toStringValue(productMap?['nameTe']) ??
+          _ApiModelParser.toStringValue(productMap?['title']),
+      emoji:
+          _ApiModelParser.toStringValue(json['emoji']) ??
+          _ApiModelParser.toStringValue(productMap?['emoji']),
+      imageUrl:
+          _ApiModelParser.toStringValue(json['imageUrl']) ??
+          _ApiModelParser.toStringValue(json['image']) ??
+          _ApiModelParser.toStringValue(json['thumbnail']) ??
+          _ApiModelParser.toStringValue(productMap?['imageUrl']) ??
+          _ApiModelParser.toStringValue(productMap?['image']) ??
+          _ApiModelParser.toStringValue(productMap?['thumbnail']),
+      unitPrice:
+          _ApiModelParser.toDouble(json['unitPrice']) ??
+          _ApiModelParser.toDouble(json['price']) ??
+          _ApiModelParser.toDouble(productMap?['unitPrice']) ??
+          _ApiModelParser.toDouble(productMap?['price']),
+      unit:
+          _ApiModelParser.toStringValue(json['unit']) ??
+          _ApiModelParser.toStringValue(json['weight']) ??
+          _ApiModelParser.toStringValue(productMap?['unit']) ??
+          _ApiModelParser.toStringValue(productMap?['weight']),
+      quantity:
+          _ApiModelParser.toInt(json['quantity']) ??
+          _ApiModelParser.toInt(json['qty']),
+      totalPrice:
+          _ApiModelParser.toDouble(json['totalPrice']) ??
+          _ApiModelParser.toDouble(json['lineTotal']) ??
+          _ApiModelParser.toDouble(json['amount']),
+      maxOrderQty:
+          _ApiModelParser.toInt(json['maxOrderQty']) ??
+          _ApiModelParser.toInt(json['maxQty']),
       inStock: _ApiModelParser.toBool(json['inStock']),
     );
   }
@@ -843,6 +1109,7 @@ class CartData {
     this.totalItems,
     this.subTotal,
     this.deliveryCharge,
+    this.taxes,
     this.discount,
     this.totalAmount,
     this.freeDelivery,
@@ -853,20 +1120,39 @@ class CartData {
   final int? totalItems;
   final double? subTotal;
   final double? deliveryCharge;
+  final double? taxes;
   final double? discount;
   final double? totalAmount;
   final bool? freeDelivery;
   final double? freeDeliveryAbove;
 
   factory CartData.fromJson(Map<String, dynamic> json) {
-    final list = _ApiModelParser.toMapList(json['items']);
+    final list = _ApiModelParser.toMapList(json['items']).isNotEmpty
+        ? _ApiModelParser.toMapList(json['items'])
+        : (_ApiModelParser.toMapList(json['cartItems']).isNotEmpty
+              ? _ApiModelParser.toMapList(json['cartItems'])
+              : _ApiModelParser.toMapList(json['products']));
     return CartData(
       items: list.map(CartItemModel.fromJson).toList(),
-      totalItems: _ApiModelParser.toInt(json['totalItems']),
-      subTotal: _ApiModelParser.toDouble(json['subTotal']),
-      deliveryCharge: _ApiModelParser.toDouble(json['deliveryCharge']),
+      totalItems:
+          _ApiModelParser.toInt(json['totalItems']) ??
+          _ApiModelParser.toInt(json['itemCount']),
+      subTotal:
+          _ApiModelParser.toDouble(json['subTotal']) ??
+          _ApiModelParser.toDouble(json['subtotal']),
+      deliveryCharge:
+          _ApiModelParser.toDouble(json['deliveryCharge']) ??
+          _ApiModelParser.toDouble(json['deliveryFee']) ??
+          _ApiModelParser.toDouble(json['shippingCharge']),
+      taxes:
+          _ApiModelParser.toDouble(json['taxes']) ??
+          _ApiModelParser.toDouble(json['tax']) ??
+          _ApiModelParser.toDouble(json['gst']),
       discount: _ApiModelParser.toDouble(json['discount']),
-      totalAmount: _ApiModelParser.toDouble(json['totalAmount']),
+      totalAmount:
+          _ApiModelParser.toDouble(json['totalAmount']) ??
+          _ApiModelParser.toDouble(json['grandTotal']) ??
+          _ApiModelParser.toDouble(json['total']),
       freeDelivery: _ApiModelParser.toBool(json['freeDelivery']),
       freeDeliveryAbove: _ApiModelParser.toDouble(json['freeDeliveryAbove']),
     );
@@ -888,11 +1174,34 @@ class CartApiResponse {
 
   factory CartApiResponse.fromHttp(int statusCode, String rawBody) {
     final payload = _ApiModelParser.decodeObject(rawBody);
-    final dataMap = _ApiModelParser.toMap(payload?['data']);
+    final dataMap =
+        _ApiModelParser.toMap(payload?['data']) ??
+        ((payload != null &&
+                (payload.containsKey('items') ||
+                    payload.containsKey('cartItems') ||
+                    payload.containsKey('products')))
+            ? payload
+            : null);
+    final dataList = _ApiModelParser.toMapList(payload?['data']);
+    final directList = _ApiModelParser.decodeMapList(rawBody);
+
+    CartData? parsedData;
+    if (dataMap != null) {
+      parsedData = CartData.fromJson(dataMap);
+    } else if (dataList.isNotEmpty) {
+      parsedData = CartData(
+        items: dataList.map(CartItemModel.fromJson).toList(),
+      );
+    } else if (directList.isNotEmpty) {
+      parsedData = CartData(
+        items: directList.map(CartItemModel.fromJson).toList(),
+      );
+    }
+
     return CartApiResponse(
       isSuccess: statusCode >= 200 && statusCode < 300,
       message: _ApiModelParser.extractMessage(payload),
-      data: dataMap == null ? null : CartData.fromJson(dataMap),
+      data: parsedData,
       errors: _ApiModelParser.toStringList(payload?['errors']),
     );
   }
@@ -1280,6 +1589,18 @@ class _ApiModelParser {
     }
   }
 
+  static List<Map<String, dynamic>> decodeMapList(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.whereType<Map<String, dynamic>>().toList();
+      }
+      return const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   static String? extractMessage(Map<String, dynamic>? payload) {
     if (payload == null) {
       return null;
@@ -1339,6 +1660,14 @@ class _ApiModelParser {
       return null;
     }
 
+    for (final key in ['otpCode', 'otp', 'code']) {
+      final value = payload[key];
+      final otp = normalizeOtp(value?.toString());
+      if (otp != null) {
+        return otp;
+      }
+    }
+
     final data = payload['data'];
     if (data is Map<String, dynamic>) {
       for (final key in ['otpCode', 'otp', 'code']) {
@@ -1385,7 +1714,7 @@ class _ApiModelParser {
     if (raw == null || raw.isEmpty) {
       return null;
     }
-    final match = RegExp(r'\b(\d{6})\b').firstMatch(raw);
+    final match = RegExp(r'\b(\d{4})\b').firstMatch(raw);
     return match?.group(1);
   }
 

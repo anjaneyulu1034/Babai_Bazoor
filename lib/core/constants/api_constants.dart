@@ -2,7 +2,12 @@ class ApiConstants {
   const ApiConstants._();
 
   static const String baseUrl = 'http://204.168.159.160:8085';
+  static const String api = '/api';
   static const String apiV1 = '/api/v1';
+  static const String mapsApiKey = String.fromEnvironment(
+    'GOOGLE_MAPS_API_KEY',
+    defaultValue: 'AIzaSyAT3wIjV73qVXPAlgkyifnns38GztnbNF4',
+  );
 
   static String resolveMediaUrl(String? rawValue) {
     final raw = rawValue?.trim() ?? '';
@@ -21,6 +26,43 @@ class ApiConstants {
     }
     return base.resolve('/$raw').toString();
   }
+
+  static void addLanguageQuery(
+    Map<String, String> query,
+    String? languageCode,
+  ) {
+    final code = languageCode?.trim().toLowerCase();
+    if (code == null || code.isEmpty) {
+      return;
+    }
+    query['lang'] = code;
+  }
+
+  static Uri googleGeocodeByLatLng({
+    required double latitude,
+    required double longitude,
+  }) {
+    return Uri.https('maps.googleapis.com', '/maps/api/geocode/json', {
+      'latlng': '$latitude,$longitude',
+      'key': mapsApiKey,
+    });
+  }
+
+  static Uri googleGeocodeByAddress({required String address}) {
+    return Uri.https('maps.googleapis.com', '/maps/api/geocode/json', {
+      'address': address,
+      'key': mapsApiKey,
+      'components': 'country:in',
+    });
+  }
+
+  static Uri googlePlacesAutocomplete({required String input}) {
+    return Uri.https(
+      'maps.googleapis.com',
+      '/maps/api/place/autocomplete/json',
+      {'input': input, 'key': mapsApiKey, 'components': 'country:in'},
+    );
+  }
 }
 
 class AuthApiEndpoints {
@@ -28,14 +70,22 @@ class AuthApiEndpoints {
 
   static Uri sendOtp() {
     return Uri.parse(
-      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/auth/send-otp',
+      '${ApiConstants.baseUrl}${ApiConstants.api}/auth/send-otp',
     );
   }
 
   static Uri verifyOtp() {
     return Uri.parse(
-      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/auth/verify-otp',
+      '${ApiConstants.baseUrl}${ApiConstants.api}/auth/verify-otp',
     );
+  }
+
+  static Uri google() {
+    return Uri.parse('${ApiConstants.baseUrl}${ApiConstants.api}/auth/google');
+  }
+
+  static Uri me() {
+    return Uri.parse('${ApiConstants.baseUrl}${ApiConstants.api}/auth/me');
   }
 }
 
@@ -52,18 +102,22 @@ class LocationApiEndpoints {
 class HomeApiEndpoints {
   const HomeApiEndpoints._();
 
-  static Uri home({required String pincode}) {
+  static Uri home({required String pincode, String? languageCode}) {
+    final query = <String, String>{'pincode': pincode.trim()};
+    ApiConstants.addLanguageQuery(query, languageCode);
     return Uri.parse(
-      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/home',
-    ).replace(queryParameters: {'pincode': pincode.trim()});
+      '${ApiConstants.baseUrl}${ApiConstants.api}/dashboard',
+    ).replace(queryParameters: query);
   }
 
   static Uri sections({
     required String pincode,
+    String? languageCode,
     double? latitude,
     double? longitude,
   }) {
     final query = <String, String>{'pincode': pincode.trim()};
+    ApiConstants.addLanguageQuery(query, languageCode);
     if (latitude != null) {
       query['lat'] = latitude.toStringAsFixed(4);
     }
@@ -76,34 +130,75 @@ class HomeApiEndpoints {
     ).replace(queryParameters: query);
   }
 
-  static Uri search({required String query, required String pincode}) {
+  static Uri search({
+    required String query,
+    required String pincode,
+    String? languageCode,
+  }) {
+    final params = <String, String>{
+      'q': query.trim(),
+      'pincode': pincode.trim(),
+    };
+    ApiConstants.addLanguageQuery(params, languageCode);
     return Uri.parse(
       '${ApiConstants.baseUrl}${ApiConstants.apiV1}/home/search',
-    ).replace(queryParameters: {'q': query.trim(), 'pincode': pincode.trim()});
+    ).replace(queryParameters: params);
   }
 }
 
 class CategoryApiEndpoints {
   const CategoryApiEndpoints._();
 
-  static Uri list() {
-    return Uri.parse('${ApiConstants.baseUrl}${ApiConstants.apiV1}/categories');
+  static Uri list({String? type, String? languageCode}) {
+    final uri = Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/categories',
+    );
+    final query = <String, String>{};
+    final normalizedType = type?.trim();
+    if (normalizedType != null && normalizedType.isNotEmpty) {
+      query['type'] = normalizedType;
+    }
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return query.isEmpty ? uri : uri.replace(queryParameters: query);
   }
 
-  static Uri details(int id) {
+  static Uri detailsBySlug(String slug) {
     return Uri.parse(
-      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/categories/$id',
+      '${ApiConstants.baseUrl}${ApiConstants.api}/categories/${slug.trim()}',
     );
   }
 
-  static Uri tree() {
+  static Uri byId(int id) {
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/categories/$id',
+    );
+  }
+
+  static Uri subCategories(int categoryId, {String? languageCode}) {
+    final query = <String, String>{};
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/categories/$categoryId/sub-categories',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+  }
+
+  static Uri subCategoryById(int id) {
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/categories/sub-categories/$id',
+    );
+  }
+
+  static Uri tree({String? languageCode}) {
+    final query = <String, String>{};
+    ApiConstants.addLanguageQuery(query, languageCode);
     return Uri.parse(
       '${ApiConstants.baseUrl}${ApiConstants.apiV1}/categories/tree',
-    );
+    ).replace(queryParameters: query.isEmpty ? null : query);
   }
 
   static Uri products(
     int categoryId, {
+    String? languageCode,
     int? subCategoryId,
     String? sort,
     int? pageNumber,
@@ -113,15 +208,13 @@ class CategoryApiEndpoints {
     if (subCategoryId != null) {
       query['subCategoryId'] = '$subCategoryId';
     }
-    if (sort != null && sort.trim().isNotEmpty) {
-      query['sort'] = sort.trim();
-    }
     if (pageNumber != null) {
-      query['pageNumber'] = '$pageNumber';
+      query['page'] = '$pageNumber';
     }
     if (pageSize != null) {
       query['pageSize'] = '$pageSize';
     }
+    ApiConstants.addLanguageQuery(query, languageCode);
 
     return Uri.parse(
       '${ApiConstants.baseUrl}${ApiConstants.apiV1}/categories/$categoryId/products',
@@ -133,51 +226,56 @@ class ProductApiEndpoints {
   const ProductApiEndpoints._();
 
   static Uri list({
+    String? languageCode,
     int? categoryId,
+    int? subCategoryId,
     String? search,
     bool? inStockOnly,
-    bool? featuredOnly,
+    bool? featured,
     String? sortBy,
     int? pageNumber,
     int? pageSize,
   }) {
     final query = <String, String>{};
     if (categoryId != null) {
-      query['CategoryId'] = '$categoryId';
+      query['categoryId'] = '$categoryId';
+    }
+    if (subCategoryId != null) {
+      query['subCategoryId'] = '$subCategoryId';
     }
     if (search != null && search.trim().isNotEmpty) {
-      query['Search'] = search.trim();
+      query['search'] = search.trim();
     }
     if (inStockOnly != null) {
-      query['InStockOnly'] = '$inStockOnly';
+      query['inStockOnly'] = '$inStockOnly';
     }
-    if (featuredOnly != null) {
-      query['FeaturedOnly'] = '$featuredOnly';
-    }
-    if (sortBy != null && sortBy.trim().isNotEmpty) {
-      query['SortBy'] = sortBy.trim();
+    if (featured != null) {
+      query['featured'] = '$featured';
     }
     if (pageNumber != null) {
-      query['PageNumber'] = '$pageNumber';
+      query['page'] = '$pageNumber';
     }
     if (pageSize != null) {
-      query['PageSize'] = '$pageSize';
+      query['pageSize'] = '$pageSize';
     }
+    ApiConstants.addLanguageQuery(query, languageCode);
 
     return Uri.parse(
-      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/products',
+      '${ApiConstants.baseUrl}${ApiConstants.api}/products',
     ).replace(queryParameters: query.isEmpty ? null : query);
   }
 
-  static Uri details(int id) {
+  static Uri details(int id, {String? languageCode}) {
+    final query = <String, String>{};
+    ApiConstants.addLanguageQuery(query, languageCode);
     return Uri.parse(
-      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/products/$id',
-    );
+      '${ApiConstants.baseUrl}${ApiConstants.api}/products/$id',
+    ).replace(queryParameters: query.isEmpty ? null : query);
   }
 
   static Uri checkPincode(String pincode) {
     return Uri.parse(
-      '${ApiConstants.baseUrl}${ApiConstants.apiV1}/products/check-pincode/$pincode',
+      '${ApiConstants.baseUrl}${ApiConstants.api}/products/check-pincode/$pincode',
     );
   }
 }
@@ -185,12 +283,40 @@ class ProductApiEndpoints {
 class CartApiEndpoints {
   const CartApiEndpoints._();
 
-  static Uri cart({String? pincode}) {
-    final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.apiV1}/cart');
-    if (pincode == null || pincode.trim().isEmpty) {
-      return uri;
+  static Uri cart({String? pincode, String? languageCode}) {
+    final query = <String, String>{};
+    final normalizedPincode = pincode?.trim();
+    if (normalizedPincode != null && normalizedPincode.isNotEmpty) {
+      query['pincode'] = normalizedPincode;
     }
-    return uri.replace(queryParameters: {'pincode': pincode.trim()});
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/cart',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+  }
+
+  static Uri update({String? pincode, String? languageCode}) {
+    final query = <String, String>{};
+    final normalizedPincode = pincode?.trim();
+    if (normalizedPincode != null && normalizedPincode.isNotEmpty) {
+      query['pincode'] = normalizedPincode;
+    }
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/cart/update',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+  }
+
+  static Uri clear({String? pincode, String? languageCode}) {
+    final query = <String, String>{};
+    final normalizedPincode = pincode?.trim();
+    if (normalizedPincode != null && normalizedPincode.isNotEmpty) {
+      query['pincode'] = normalizedPincode;
+    }
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/cart/clear',
+    ).replace(queryParameters: query.isEmpty ? null : query);
   }
 }
 

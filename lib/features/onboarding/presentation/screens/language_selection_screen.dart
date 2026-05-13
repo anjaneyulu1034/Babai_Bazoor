@@ -1,4 +1,3 @@
-import 'package:babai_bazor_app/core/constants/app_colors.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/features/auth/presentation/screens/mobile_login_screen.dart';
 import 'package:flutter/material.dart';
@@ -49,12 +48,12 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen> {
             child: DecoratedBox(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                   colors: [
-                    Color(0xFFFFF7ED),
-                    Color(0xFFFFECD5),
-                    Color(0xFFFFE2C4),
+                    Color(0xFF1A143B),
+                    Color(0xFF81241B),
+                    Color(0xFFC9380B),
                   ],
                 ),
               ),
@@ -63,17 +62,17 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen> {
           const Positioned(
             left: -70,
             top: -40,
-            child: _AmbientBlob(size: 220, color: Color(0x30FFFFFF)),
+            child: _AmbientBlob(size: 220, color: Color(0x24FFFFFF)),
           ),
           const Positioned(
             right: -50,
             top: 130,
-            child: _AmbientBlob(size: 170, color: Color(0x26F47A20)),
+            child: _AmbientBlob(size: 170, color: Color(0x22FFB26B)),
           ),
           const Positioned(
             left: -30,
             bottom: 20,
-            child: _AmbientBlob(size: 180, color: Color(0x1FFFFFFF)),
+            child: _AmbientBlob(size: 180, color: Color(0x1AFFFFFF)),
           ),
           Align(
             alignment: Alignment.bottomCenter,
@@ -103,7 +102,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen> {
                         style: TextStyle(
                           fontSize: 38,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF2B1500),
+                          color: Color(0xFFF8EFE6),
                           letterSpacing: 0.2,
                           height: 1.05,
                           fontFamily: 'serif',
@@ -130,8 +129,8 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen> {
                         child: ElevatedButton(
                           onPressed: _continue,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryOrange,
-                            foregroundColor: Colors.white,
+                            backgroundColor: const Color(0xFFFFBE0A),
+                            foregroundColor: const Color(0xFF111111),
                             minimumSize: const Size.fromHeight(58),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
@@ -141,9 +140,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen> {
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          child: Text(
-                            '${t(AppLanguage.en, 'continue')} / ${t(AppLanguage.te, 'continue')}',
-                          ),
+                          child: const Text('Continue'),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -152,7 +149,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen> {
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 13.5,
-                          color: Color(0xFF9D886E),
+                          color: Color(0xFFFFD4BE),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -206,16 +203,16 @@ class _LanguageTile extends StatelessWidget {
       onTap: onTap,
       child: Ink(
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFFFF1E2) : Colors.white,
+          color: selected ? const Color(0x33FFB86A) : const Color(0x1FFFFFFF),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: selected ? AppColors.primaryOrange : const Color(0xFFE4D4C1),
+            color: selected ? const Color(0xFFFFBE0A) : const Color(0x66FFFFFF),
             width: selected ? 2 : 1,
           ),
           boxShadow: [
             if (selected)
               const BoxShadow(
-                color: Color(0x26F47A20),
+                color: Color(0x30B03700),
                 blurRadius: 16,
                 offset: Offset(0, 8),
               ),
@@ -235,8 +232,8 @@ class _LanguageTile extends StatelessWidget {
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
                         color: selected
-                            ? const Color(0xFF7A3600)
-                            : const Color(0xFF2A2A2A),
+                            ? const Color(0xFFFFE9B2)
+                            : const Color(0xFFF5F2EE),
                         height: 1.05,
                       ),
                     ),
@@ -246,8 +243,8 @@ class _LanguageTile extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         color: selected
-                            ? const Color(0xFF8A643F)
-                            : const Color(0xFF676767),
+                            ? const Color(0xFFFFD9BE)
+                            : const Color(0xFFD8C9C2),
                         fontWeight: FontWeight.w500,
                         height: 1,
                       ),
@@ -263,8 +260,8 @@ class _LanguageTile extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: selected
-                        ? AppColors.primaryOrange
-                        : const Color(0xFFCFCFCF),
+                        ? const Color(0xFFFFBE0A)
+                        : const Color(0x99FFFFFF),
                     width: selected ? 2 : 1,
                   ),
                 ),
@@ -273,7 +270,7 @@ class _LanguageTile extends StatelessWidget {
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: AppColors.primaryOrange,
+                            color: Color(0xFFFFBE0A),
                           ),
                           child: SizedBox(width: 16, height: 16),
                         ),

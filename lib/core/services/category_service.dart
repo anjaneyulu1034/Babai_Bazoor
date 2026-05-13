@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:babai_bazor_app/core/constants/api_constants.dart';
@@ -9,6 +10,32 @@ import 'package:http/http.dart' as http;
 
 class CategoryService {
   const CategoryService();
+
+  List<HomeSubCategory> _parseSubCategories(String rawBody) {
+    try {
+      final decoded = jsonDecode(rawBody);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map<String, dynamic>>()
+            .map(HomeSubCategory.fromJson)
+            .toList();
+      }
+
+      if (decoded is Map<String, dynamic>) {
+        final data = decoded['data'];
+        if (data is List) {
+          return data
+              .whereType<Map<String, dynamic>>()
+              .map(HomeSubCategory.fromJson)
+              .toList();
+        }
+      }
+    } catch (_) {
+      return const [];
+    }
+
+    return const [];
+  }
 
   Future<Map<String, String>> _headers(AppLanguage language) async {
     final headers = <String, String>{ApiHeaders.acceptLanguage: language.code};
@@ -22,10 +49,14 @@ class CategoryService {
 
   Future<CategoriesListApiResponse> getCategories({
     required AppLanguage language,
+    String? type,
   }) async {
     try {
       final response = await http
-          .get(CategoryApiEndpoints.list(), headers: await _headers(language))
+          .get(
+            CategoryApiEndpoints.list(type: type, languageCode: language.code),
+            headers: await _headers(language),
+          )
           .timeout(const Duration(seconds: 15));
 
       return CategoriesListApiResponse.fromHttp(
@@ -52,12 +83,12 @@ class CategoryService {
 
   Future<CategoryDetailsApiResponse> getCategoryDetails({
     required AppLanguage language,
-    required int id,
+    required String slug,
   }) async {
     try {
       final response = await http
           .get(
-            CategoryApiEndpoints.details(id),
+            CategoryApiEndpoints.detailsBySlug(slug),
             headers: await _headers(language),
           )
           .timeout(const Duration(seconds: 15));
@@ -81,6 +112,35 @@ class CategoryService {
         isSuccess: false,
         message: 'Unable to load category details.',
       );
+    }
+  }
+
+  Future<List<HomeSubCategory>> getSubCategories({
+    required AppLanguage language,
+    required int categoryId,
+  }) async {
+    try {
+      final response = await http
+          .get(
+            CategoryApiEndpoints.subCategories(
+              categoryId,
+              languageCode: language.code,
+            ),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return const [];
+      }
+
+      return _parseSubCategories(response.body);
+    } on TimeoutException {
+      return const [];
+    } on SocketException {
+      return const [];
+    } catch (_) {
+      return const [];
     }
   }
 }

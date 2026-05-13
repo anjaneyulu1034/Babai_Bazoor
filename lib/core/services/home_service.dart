@@ -30,7 +30,10 @@ class HomeService {
     try {
       final response = await http
           .get(
-            HomeApiEndpoints.home(pincode: pincode),
+            HomeApiEndpoints.home(
+              pincode: pincode,
+              languageCode: language.code,
+            ),
             headers: await _headers(language),
           )
           .timeout(const Duration(seconds: 20));
@@ -56,6 +59,7 @@ class HomeService {
           .get(
             HomeApiEndpoints.sections(
               pincode: pincode,
+              languageCode: language.code,
               latitude: latitude,
               longitude: longitude,
             ),
@@ -93,7 +97,11 @@ class HomeService {
     try {
       final response = await http
           .get(
-            HomeApiEndpoints.search(query: query, pincode: pincode),
+            HomeApiEndpoints.search(
+              query: query,
+              pincode: pincode,
+              languageCode: language.code,
+            ),
             headers: await _headers(language),
           )
           .timeout(const Duration(seconds: 20));
@@ -117,6 +125,45 @@ class HomeService {
     }
   }
 
+  Future<ProductsListApiResponse> getProducts({
+    required AppLanguage language,
+    int pageNumber = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final response = await http
+          .get(
+            ProductApiEndpoints.list(
+              languageCode: language.code,
+              pageNumber: pageNumber,
+              pageSize: pageSize,
+            ),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      return ProductsListApiResponse.fromHttp(
+        response.statusCode,
+        response.body,
+      );
+    } on TimeoutException {
+      return const ProductsListApiResponse(
+        isSuccess: false,
+        message: 'Request timed out. Try again.',
+      );
+    } on SocketException {
+      return const ProductsListApiResponse(
+        isSuccess: false,
+        message: 'No internet connection.',
+      );
+    } catch (_) {
+      return const ProductsListApiResponse(
+        isSuccess: false,
+        message: 'Unable to load products.',
+      );
+    }
+  }
+
   Future<CategoryProductsApiResponse> getCategoryProducts({
     required AppLanguage language,
     required int categoryId,
@@ -130,6 +177,7 @@ class HomeService {
           .get(
             CategoryApiEndpoints.products(
               categoryId,
+              languageCode: language.code,
               subCategoryId: subCategoryId,
               sort: sort,
               pageNumber: pageNumber,
@@ -139,10 +187,11 @@ class HomeService {
           )
           .timeout(const Duration(seconds: 20));
 
-      return CategoryProductsApiResponse.fromHttp(
+      final parsed = CategoryProductsApiResponse.fromHttp(
         response.statusCode,
         response.body,
       );
+      return parsed;
     } on TimeoutException {
       return const CategoryProductsApiResponse(
         isSuccess: false,
@@ -166,7 +215,10 @@ class HomeService {
   }) async {
     try {
       final response = await http
-          .get(CategoryApiEndpoints.tree(), headers: await _headers(language))
+          .get(
+            CategoryApiEndpoints.tree(languageCode: language.code),
+            headers: await _headers(language),
+          )
           .timeout(const Duration(seconds: 20));
 
       return CategoriesTreeApiResponse.fromHttp(

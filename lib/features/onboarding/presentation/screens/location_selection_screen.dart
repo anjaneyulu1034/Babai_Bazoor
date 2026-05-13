@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:babai_bazor_app/core/constants/api_constants.dart';
 import 'package:babai_bazor_app/core/constants/app_colors.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/core/widgets/bb_primary_button.dart';
@@ -25,8 +26,6 @@ class LocationSelectionScreen extends StatefulWidget {
 }
 
 class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
-  static const String _mapsApiKey = 'AIzaSyAT3wIjV73qVXPAlgkyifnns38GztnbNF4';
-
   final TextEditingController _areaController = TextEditingController();
   late AppLanguage _screenLanguage;
   bool _isFetching = false;
@@ -84,11 +83,7 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
     }
 
     try {
-      final uri = Uri.https(
-        'maps.googleapis.com',
-        '/maps/api/place/autocomplete/json',
-        {'input': query, 'key': _mapsApiKey, 'components': 'country:in'},
-      );
+      final uri = ApiConstants.googlePlacesAutocomplete(input: query);
 
       final response = await http.get(uri);
       if (response.statusCode != 200 ||
@@ -189,8 +184,9 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      final uri = Uri.parse(
-        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$_mapsApiKey',
+      final uri = ApiConstants.googleGeocodeByLatLng(
+        latitude: position.latitude,
+        longitude: position.longitude,
       );
       final response = await http.get(uri);
       if (response.statusCode != 200) {

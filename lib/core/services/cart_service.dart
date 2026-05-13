@@ -48,7 +48,10 @@ class CartService {
     try {
       final response = await http
           .get(
-            CartApiEndpoints.cart(pincode: pincode),
+            CartApiEndpoints.cart(
+              pincode: pincode,
+              languageCode: language.code,
+            ),
             headers: await _headers(language),
           )
           .timeout(const Duration(seconds: 15));
@@ -97,13 +100,32 @@ class CartService {
     String? pincode,
   }) async {
     try {
-      final response = await http
+      final headers = await _headers(language, json: true);
+      final body = jsonEncode(request.toJson());
+      var response = await http
           .put(
-            CartApiEndpoints.cart(pincode: pincode),
-            headers: await _headers(language, json: true),
-            body: jsonEncode(request.toJson()),
+            CartApiEndpoints.update(
+              pincode: pincode,
+              languageCode: language.code,
+            ),
+            headers: headers,
+            body: body,
           )
           .timeout(const Duration(seconds: 15));
+
+      // Some deployments expose update at PUT /api/cart instead of /api/cart/update.
+      if (response.statusCode == 404) {
+        response = await http
+            .put(
+              CartApiEndpoints.cart(
+                pincode: pincode,
+                languageCode: language.code,
+              ),
+              headers: headers,
+              body: body,
+            )
+            .timeout(const Duration(seconds: 15));
+      }
 
       final parsed = CartApiResponse.fromHttp(
         response.statusCode,
@@ -143,17 +165,89 @@ class CartService {
     }
   }
 
+  Future<CartApiResponse> addToCart({
+    required AppLanguage language,
+    required CartUpdateRequest request,
+    String? pincode,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            CartApiEndpoints.cart(
+              pincode: pincode,
+              languageCode: language.code,
+            ),
+            headers: await _headers(language, json: true),
+            body: jsonEncode(request.toJson()),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final parsed = CartApiResponse.fromHttp(
+        response.statusCode,
+        response.body,
+      );
+      if (parsed.isSuccess ||
+          (parsed.message ?? '').trim().isNotEmpty ||
+          parsed.errors.isNotEmpty) {
+        return parsed;
+      }
+
+      return CartApiResponse(
+        isSuccess: false,
+        message: _httpFailureMessage(
+          response.statusCode,
+          response.body,
+          'Unable to add to cart',
+        ),
+        data: parsed.data,
+        errors: parsed.errors,
+      );
+    } on TimeoutException {
+      return const CartApiResponse(
+        isSuccess: false,
+        message: 'Request timed out. Try again.',
+      );
+    } on SocketException {
+      return const CartApiResponse(
+        isSuccess: false,
+        message: 'No internet connection.',
+      );
+    } catch (_) {
+      return const CartApiResponse(
+        isSuccess: false,
+        message: 'Unable to add to cart.',
+      );
+    }
+  }
+
   Future<StringDataApiResponse> clearCart({
     required AppLanguage language,
     String? pincode,
   }) async {
     try {
-      final response = await http
+      final headers = await _headers(language);
+      var response = await http
           .delete(
-            CartApiEndpoints.cart(pincode: pincode),
-            headers: await _headers(language),
+            CartApiEndpoints.clear(
+              pincode: pincode,
+              languageCode: language.code,
+            ),
+            headers: headers,
           )
           .timeout(const Duration(seconds: 15));
+
+      // Some deployments expose clear at DELETE /api/cart.
+      if (response.statusCode == 404) {
+        response = await http
+            .delete(
+              CartApiEndpoints.cart(
+                pincode: pincode,
+                languageCode: language.code,
+              ),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 15));
+      }
 
       final parsed = StringDataApiResponse.fromHttp(
         response.statusCode,
