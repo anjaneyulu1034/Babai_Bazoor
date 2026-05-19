@@ -1,9 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:babai_bazor_app/core/constants/api_constants.dart';
 import 'package:babai_bazor_app/core/constants/app_colors.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
+import 'package:babai_bazor_app/core/services/auth_session_service.dart';
 import 'package:babai_bazor_app/features/auth/presentation/screens/mobile_login_screen.dart';
+import 'package:babai_bazor_app/features/home/presentation/screens/home_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({
@@ -22,6 +27,7 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen> {
   Timer? _autoSlideTimer;
   int _currentPage = 0;
+  bool _isCheckingSession = true;
 
   static const List<_OnboardingSlide> _slides = [
     _OnboardingSlide(
@@ -44,8 +50,9 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    _restoreSessionIfLoggedIn();
     _autoSlideTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (!mounted) {
+      if (!mounted || _isCheckingSession) {
         return;
       }
 
@@ -53,6 +60,62 @@ class _SplashScreenState extends State<SplashScreen> {
         _currentPage = (_currentPage + 1) % _slides.length;
       });
     });
+  }
+
+  Future<void> _restoreSessionIfLoggedIn() async {
+    final token = await AuthSessionService.instance.getToken();
+    if (token == null || token.trim().isEmpty) {
+      if (mounted) {
+        setState(() => _isCheckingSession = false);
+      }
+      return;
+    }
+
+    var sessionValid = true;
+    try {
+      final response = await http
+          .get(
+            AuthApiEndpoints.me(),
+            headers: {
+              ApiHeaders.authorization:
+                  '${ApiHeaders.bearerPrefix}${token.trim()}',
+              ApiHeaders.acceptLanguage: widget.language.code,
+            },
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        await AuthSessionService.instance.clearToken();
+        sessionValid = false;
+      }
+    } on SocketException {
+      // Offline reopen: keep saved session and open home.
+      sessionValid = true;
+    } on TimeoutException {
+      sessionValid = true;
+    } catch (_) {
+      sessionValid = true;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (sessionValid) {
+      final savedLocation =
+          await AuthSessionService.instance.getDeliveryLocation();
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(
+            language: widget.language,
+            currentLocation: savedLocation,
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isCheckingSession = false);
   }
 
   void _goToLogin() {
@@ -190,11 +253,19 @@ class _SplashScreenState extends State<SplashScreen> {
                     }),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _goToLogin,
-                      style: ElevatedButton.styleFrom(
+                  if (_isCheckingSession)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFFFBE0A),
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _goToLogin,
+                        style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFFBE0A),
                         foregroundColor: const Color(0xFF111111),
                         minimumSize: const Size.fromHeight(74),
@@ -206,9 +277,9 @@ class _SplashScreenState extends State<SplashScreen> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      child: Text('${t(widget.language, 'get_started')} →'),
+                        child: Text('${t(widget.language, 'get_started')} →'),
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 14),
                   const Text(
                     'Terms & Privacy Policy apply',

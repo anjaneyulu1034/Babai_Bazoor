@@ -57,9 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final HomeService _homeService = const HomeService();
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  final PageController _bannerPageController = PageController(
-    viewportFraction: 0.92,
-  );
+  final PageController _bannerPageController = PageController();
   late AppLanguage _activeLanguage;
 
   String? _apiLocation;
@@ -95,6 +93,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool get _isGuestMode =>
       (widget.currentLocation ?? '').trim().toLowerCase() == 'guest mode';
+
+  List<HomeBannerSummary> get _carouselBanners {
+    if (_banners.length <= 3) {
+      return _banners;
+    }
+    return _banners.sublist(0, 3);
+  }
 
   String get _effectivePincode {
     final guestPincode = _resolvedGuestPincode?.trim();
@@ -197,16 +202,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _syncBannerAutoSlide() {
     _bannerAutoSlideTimer?.cancel();
-    if (_banners.length <= 1) {
+    final banners = _carouselBanners;
+    if (banners.length <= 1) {
       return;
     }
 
     _bannerAutoSlideTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!mounted || !_bannerPageController.hasClients || _banners.isEmpty) {
+      if (!mounted || !_bannerPageController.hasClients || banners.isEmpty) {
         return;
       }
 
-      final nextIndex = (_activeBannerIndex + 1) % _banners.length;
+      final nextIndex = (_activeBannerIndex + 1) % banners.length;
       _bannerPageController.animateToPage(
         nextIndex,
         duration: const Duration(milliseconds: 380),
@@ -566,12 +572,14 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    final normalized = selectedLocation.trim();
     setState(() {
-      _apiLocation = selectedLocation.trim();
-      _resolvedGuestLocation = selectedLocation.trim();
+      _apiLocation = normalized;
+      _resolvedGuestLocation = normalized;
       _resolvedGuestPincode = _resolvePincode(selectedLocation);
     });
 
+    await AuthSessionService.instance.saveDeliveryLocation(normalized);
     await _loadHomeData();
   }
 
@@ -930,6 +938,57 @@ class _HomeScreenState extends State<HomeScreen> {
     return '${pct.round()}% OFF';
   }
 
+  Future<void> _handleBackPress() async {
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Exit App',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF14192D),
+            ),
+          ),
+          content: const Text(
+            'Are you sure you want to close the app?',
+            style: TextStyle(
+              color: Color(0xFF4F5675),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text(
+                'No',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFF44700),
+              ),
+              child: const Text(
+                'Yes',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldExit == true && mounted) {
+      SystemNavigator.pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final locationText = (_apiLocation != null && _apiLocation!.isNotEmpty)
@@ -944,27 +1003,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final pincode = _effectivePincode;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F8),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF1A1A3D), Color(0xFF2A294D)],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          return;
+        }
+        _handleBackPress();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF3F4F8),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF1A1A3D), Color(0xFF2A294D)],
+                          ),
                         ),
-                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1145,38 +1212,57 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                           ),
                           const SizedBox(height: 16),
-                          if (_banners.isEmpty)
-                            const _DashboardBannerCard()
-                          else
-                            SizedBox(
+                          if (_carouselBanners.isEmpty)
+                            const SizedBox(
                               height: 178,
-                              child: PageView.builder(
-                                controller: _bannerPageController,
-                                onPageChanged: (index) {
-                                  setState(() => _activeBannerIndex = index);
-                                },
-                                itemCount: _banners.length,
-                                itemBuilder: (context, index) {
-                                  final banner = _banners[index];
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 2,
-                                    ),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(20),
-                                      onTap: () => _onBannerTap(banner),
-                                      child: _DashboardBannerCard(
-                                        banner: banner,
-                                        gradientColors: _bannerGradientColors(
-                                          banner,
+                              child: _DashboardBannerCard(),
+                            )
+                          else
+                            Column(
+                              children: [
+                                SizedBox(
+                                  height: 178,
+                                  child: PageView.builder(
+                                    controller: _bannerPageController,
+                                    onPageChanged: (index) {
+                                      setState(
+                                        () => _activeBannerIndex = index,
+                                      );
+                                    },
+                                    itemCount: _carouselBanners.length,
+                                    itemBuilder: (context, index) {
+                                      final banner = _carouselBanners[index];
+                                      return InkWell(
+                                        borderRadius: BorderRadius.circular(20),
+                                        onTap: () => _onBannerTap(banner),
+                                        child: _DashboardBannerCard(
+                                          banner: banner,
+                                          gradientColors: _bannerGradientColors(
+                                            banner,
+                                          ),
                                         ),
-                                        activeIndex: _activeBannerIndex,
-                                        totalCount: _banners.length,
+                                      );
+                                    },
+                                  ),
+                                ),
+                                if (_carouselBanners.length > 1) ...[
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: List.generate(
+                                      _carouselBanners.length,
+                                      (index) => Padding(
+                                        padding: EdgeInsets.only(
+                                          left: index == 0 ? 0 : 6,
+                                        ),
+                                        child: _PagerDot(
+                                          active: index == _activeBannerIndex,
+                                        ),
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
+                                  ),
+                                ],
+                              ],
                             ),
                           const SizedBox(height: 18),
                           const _SectionHeading(
@@ -1508,6 +1594,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -1660,14 +1747,10 @@ class _DashboardBannerCard extends StatelessWidget {
   const _DashboardBannerCard({
     this.banner,
     this.gradientColors = const [Color(0xFF1DAE5F), Color(0xFF11BA84)],
-    this.activeIndex = 0,
-    this.totalCount = 0,
   });
 
   final HomeBannerSummary? banner;
   final List<Color> gradientColors;
-  final int activeIndex;
-  final int totalCount;
 
   @override
   Widget build(BuildContext context) {
@@ -1775,16 +1858,6 @@ class _DashboardBannerCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                    const Spacer(),
-                    if (totalCount > 1)
-                      Row(
-                        children: List.generate(totalCount, (index) {
-                          return Padding(
-                            padding: EdgeInsets.only(left: index == 0 ? 0 : 6),
-                            child: _PagerDot(active: index == activeIndex),
-                          );
-                        }),
-                      ),
                   ],
                 ),
               ],
@@ -1807,7 +1880,7 @@ class _PagerDot extends StatelessWidget {
       width: active ? 18 : 6,
       height: 6,
       decoration: BoxDecoration(
-        color: active ? Colors.white : const Color(0x88FFFFFF),
+        color: active ? const Color(0xFFEC3A03) : const Color(0xFFD0D4E0),
         borderRadius: BorderRadius.circular(8),
       ),
     );

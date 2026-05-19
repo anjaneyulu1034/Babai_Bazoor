@@ -302,9 +302,12 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
     final destinationLabel = '${_tagTitle(_selectedTag)}: $_resolvedLocation';
 
     if (widget.openAsChangeLocation) {
+      AuthSessionService.instance.saveDeliveryLocation(destinationLabel);
       Navigator.of(context).pop(destinationLabel);
       return;
     }
+
+    AuthSessionService.instance.saveDeliveryLocation(destinationLabel);
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
