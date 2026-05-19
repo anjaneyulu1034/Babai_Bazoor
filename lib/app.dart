@@ -69,6 +69,12 @@ class _BabaiBazorAppState extends State<BabaiBazorApp> {
           secondary: AppColors.deepBlue,
         ),
         useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          shadowColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+        ),
         textTheme: const TextTheme(
           bodyMedium: TextStyle(color: AppColors.textDark),
           bodyLarge: TextStyle(color: AppColors.textDark),

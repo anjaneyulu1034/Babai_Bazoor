@@ -1,16 +1,23 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:babai_bazor_app/core/constants/api_constants.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
+import 'package:babai_bazor_app/core/services/auth_session_service.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
 class PostOtpLocationScreen extends StatefulWidget {
-  const PostOtpLocationScreen({super.key, required this.language});
+  const PostOtpLocationScreen({
+    super.key,
+    required this.language,
+    this.openAsChangeLocation = false,
+  });
 
   final AppLanguage language;
+  final bool openAsChangeLocation;
 
   @override
   State<PostOtpLocationScreen> createState() => _PostOtpLocationScreenState();
@@ -75,18 +82,35 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      final locationTag =
-          await _resolveAddressFromCoordinates(
-            latitude: position.latitude,
-            longitude: position.longitude,
-          ) ??
-          'Lat ${position.latitude.toStringAsFixed(4)}, Lng ${position.longitude.toStringAsFixed(4)}';
+      final resolved = await _resolveAddressFromCoordinates(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      if (resolved == null || resolved.pincode.isEmpty) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(widget.language, 'location_not_found'))),
+        );
+        return;
+      }
+
+      final didSetLocation = await _setLocationOnServer(
+        resolved: resolved,
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      if (!didSetLocation || !mounted) {
+        return;
+      }
+
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _resolvedLocation = locationTag;
+        _resolvedLocation = resolved.formattedAddress;
         _hasResolvedLocation = true;
       });
     } catch (_) {
@@ -105,7 +129,7 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
     }
   }
 
-  Future<String?> _resolveAddressFromCoordinates({
+  Future<_ResolvedLocation?> _resolveAddressFromCoordinates({
     required double latitude,
     required double longitude,
   }) async {
@@ -132,7 +156,130 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
     if (formatted == null || formatted.isEmpty) {
       return null;
     }
-    return formatted;
+
+    final components =
+        (first['address_components'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+
+    String componentValue(String type) {
+      for (final component in components) {
+        final types = (component['types'] as List<dynamic>? ?? const [])
+            .map((e) => e.toString())
+            .toList();
+        if (types.contains(type)) {
+          return component['long_name']?.toString().trim() ?? '';
+        }
+      }
+      return '';
+    }
+
+    final pincode = componentValue('postal_code');
+    final city = componentValue('locality').isNotEmpty
+        ? componentValue('locality')
+        : componentValue('administrative_area_level_2');
+    final state = componentValue('administrative_area_level_1');
+
+    final streetNumber = componentValue('street_number');
+    final route = componentValue('route');
+    final premise = componentValue('premise');
+    String line1 = [
+      streetNumber,
+      route,
+      premise,
+    ].where((value) => value.isNotEmpty).join(' ').trim();
+    if (line1.isEmpty) {
+      line1 = formatted.split(',').first.trim();
+    }
+
+    return _ResolvedLocation(
+      formattedAddress: formatted,
+      line1: line1,
+      city: city,
+      state: state,
+      pincode: pincode,
+    );
+  }
+
+  Future<bool> _setLocationOnServer({
+    required _ResolvedLocation resolved,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final t = AppLocalizations.tr;
+    final token = await AuthSessionService.instance.getToken();
+    if (token == null || token.trim().isEmpty) {
+      if (!mounted) {
+        return false;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Login session expired. Please login again.'),
+        ),
+      );
+      return false;
+    }
+
+    final response = await http
+        .post(
+          LocationApiEndpoints.setLocation(),
+          headers: {
+            ApiHeaders.contentType: ApiHeaders.applicationJson,
+            ApiHeaders.authorization:
+                '${ApiHeaders.bearerPrefix}${token.trim()}',
+          },
+          body: jsonEncode({
+            'pincode': resolved.pincode,
+            'addressType': '',
+            'line1': resolved.line1,
+            'city': resolved.city,
+            'state': resolved.state,
+            'lat': latitude,
+            'lng': longitude,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>?;
+    final message = payload?['message']?.toString().trim();
+    final serviceable = payload?['serviceable'] == true;
+
+    if (!mounted) {
+      return false;
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (!serviceable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(t(widget.language, 'location_not_serviceable')),
+          ),
+        );
+        return false;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message?.isNotEmpty == true
+                ? message!
+                : 'Location set successfully',
+          ),
+        ),
+      );
+      return true;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message?.isNotEmpty == true
+              ? message!
+              : 'Unable to set location. Please try again.',
+        ),
+      ),
+    );
+    return false;
   }
 
   void _continueWithTypedArea() {
@@ -154,6 +301,11 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
 
     final destinationLabel = '${_tagTitle(_selectedTag)}: $_resolvedLocation';
 
+    if (widget.openAsChangeLocation) {
+      Navigator.of(context).pop(destinationLabel);
+      return;
+    }
+
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => HomeScreen(
@@ -164,6 +316,9 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
       (route) => false,
     );
   }
+
+  bool get _canConfirm =>
+      _hasResolvedLocation || _searchController.text.trim().isNotEmpty;
 
   String _tagTitle(_AddressTag tag) {
     switch (tag) {
@@ -179,6 +334,7 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomSafeInset = MediaQuery.of(context).viewPadding.bottom;
+    final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F8),
@@ -200,14 +356,7 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
                 children: [
                   Row(
                     children: [
-                      SizedBox(
-                        width: 2,
-                        height: 48,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(color: Color(0xCC0A0A0A)),
-                        ),
-                      ),
-                      SizedBox(width: 14),
+                      SizedBox(width: 2),
                       Text('📍', style: TextStyle(fontSize: 28)),
                     ],
                   ),
@@ -244,9 +393,17 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
               ),
             ),
             Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(28, 24, 28, 12 + bottomSafeInset),
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(
+                  28,
+                  24,
+                  28,
+                  12 + bottomSafeInset + keyboardInset,
+                ),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     if (!_hasResolvedLocation)
                       Container(
@@ -336,6 +493,7 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: _searchController,
+                        onChanged: (_) => setState(() {}),
                         onSubmitted: (_) => _continueWithTypedArea(),
                         decoration: InputDecoration(
                           hintText: 'Search area / pincode',
@@ -419,27 +577,36 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
                           _selectedTag = _AddressTag.other;
                         }),
                       ),
-                      const SizedBox(height: 14),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: _confirmAndContinue,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF44700),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            textStyle: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          child: const Text('Confirm & Continue →'),
-                        ),
-                      ),
                     ],
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: _canConfirm
+                            ? () {
+                                if (!_hasResolvedLocation) {
+                                  _continueWithTypedArea();
+                                }
+                                _confirmAndContinue();
+                              }
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFF44700),
+                          disabledBackgroundColor: const Color(0xFFD7D7E1),
+                          foregroundColor: Colors.white,
+                          disabledForegroundColor: const Color(0xFF7E88A5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        child: const Text('Confirm & Continue →'),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -449,6 +616,22 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
       ),
     );
   }
+}
+
+class _ResolvedLocation {
+  const _ResolvedLocation({
+    required this.formattedAddress,
+    required this.line1,
+    required this.city,
+    required this.state,
+    required this.pincode,
+  });
+
+  final String formattedAddress;
+  final String line1;
+  final String city;
+  final String state;
+  final String pincode;
 }
 
 enum _AddressTag { home, work, other }
