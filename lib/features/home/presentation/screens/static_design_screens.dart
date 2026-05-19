@@ -1,6 +1,9 @@
+import 'package:babai_bazor_app/core/localization/app_language_scope.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/core/models/api_models.dart';
+import 'package:babai_bazor_app/core/services/auth_session_service.dart';
 import 'package:babai_bazor_app/core/services/home_service.dart';
+import 'package:babai_bazor_app/features/auth/presentation/screens/mobile_login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -1499,6 +1502,47 @@ class StaticProfileMenuScreen extends StatelessWidget {
 
   final AppLanguage language;
 
+  Future<void> _logout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    await AuthSessionService.instance.clearToken();
+
+    if (!context.mounted) {
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (loginContext) => MobileLoginScreen(
+          language: language,
+          onLanguageChanged: (lang) =>
+              AppLanguageScope.update(loginContext, lang),
+        ),
+      ),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1554,17 +1598,21 @@ class StaticProfileMenuScreen extends StatelessWidget {
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 90),
-              children: const [
-                _MenuItem(icon: '📦', title: 'My Orders'),
-                _MenuItem(icon: '🗓️', title: 'Bookings'),
-                _MenuItem(icon: '💗', title: 'Wishlist'),
-                _MenuItem(icon: '🎟️', title: 'Coupons', count: '5'),
-                _MenuItem(icon: '📍', title: 'Addresses'),
-                _MenuItem(icon: '💳', title: 'Payment Methods'),
-                _MenuItem(icon: '⭐', title: 'My Reviews'),
-                _MenuItem(icon: '🔔', title: 'Notifications'),
-                _MenuItem(icon: '🔒', title: 'Privacy'),
-                _MenuItem(icon: '🚪', title: 'Logout'),
+              children: [
+                const _MenuItem(icon: '📦', title: 'My Orders'),
+                const _MenuItem(icon: '🗓️', title: 'Bookings'),
+                const _MenuItem(icon: '💗', title: 'Wishlist'),
+                const _MenuItem(icon: '🎟️', title: 'Coupons', count: '5'),
+                const _MenuItem(icon: '📍', title: 'Addresses'),
+                const _MenuItem(icon: '💳', title: 'Payment Methods'),
+                const _MenuItem(icon: '⭐', title: 'My Reviews'),
+                const _MenuItem(icon: '🔔', title: 'Notifications'),
+                const _MenuItem(icon: '🔒', title: 'Privacy'),
+                _MenuItem(
+                  icon: '🚪',
+                  title: 'Logout',
+                  onTap: () => _logout(context),
+                ),
               ],
             ),
           ),
@@ -2676,15 +2724,26 @@ class _CountItem extends StatelessWidget {
 }
 
 class _MenuItem extends StatelessWidget {
-  const _MenuItem({required this.icon, required this.title, this.count});
+  const _MenuItem({
+    required this.icon,
+    required this.title,
+    this.count,
+    this.onTap,
+  });
 
   final String icon;
   final String title;
   final String? count;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
@@ -2724,6 +2783,8 @@ class _MenuItem extends StatelessWidget {
           const SizedBox(width: 6),
           const Icon(Icons.chevron_right, color: Color(0xFFD4D8E6)),
         ],
+      ),
+        ),
       ),
     );
   }
