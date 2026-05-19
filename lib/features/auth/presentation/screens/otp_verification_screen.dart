@@ -104,6 +104,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     ).showSnackBar(SnackBar(content: Text(t(widget.language, 'resend_done'))));
   }
 
+  void _goBackToLogin() {
+    _log('Change number tapped. Returning to login screen.');
+    Navigator.of(context).pop();
+  }
+
   String get _otp => _controllers.map((c) => c.text).join();
 
   void _applyPrefilledOtp(String otp) {
@@ -284,6 +289,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.tr;
     final inputWidth =
         ((MediaQuery.of(context).size.width - 68 - ((_otpLength - 1) * 10)) /
                 _otpLength)
@@ -312,37 +318,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 2,
-                        height: 58,
-                        color: const Color(0xCC0D0D0D),
-                      ),
-                      const SizedBox(width: 16),
-                      Container(
-                        width: 38,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF7C65CB),
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x44000000),
-                              blurRadius: 10,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.dialpad_rounded,
-                          size: 22,
-                          color: Color(0xFFFFC232),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 8),
                   const Text(
                     'Verify your',
                     style: TextStyle(
@@ -369,6 +345,20 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       color: Color(0xFFD7B6AE),
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: _goBackToLogin,
+                    child: Text(
+                      t(widget.language, 'change_number'),
+                      style: const TextStyle(
+                        color: Color(0xFFFFBE1A),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Color(0xFFFFBE1A),
+                      ),
                     ),
                   ),
                 ],

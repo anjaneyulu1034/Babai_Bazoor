@@ -943,10 +943,6 @@ class _HomeScreenState extends State<HomeScreen> {
         : 'Current location unavailable';
 
     final pincode = _effectivePincode;
-    final compactLocation = locationText.split(',').take(2).join(',').trim();
-    final displayLocation = compactLocation.isEmpty
-        ? locationText
-        : compactLocation;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F8),
@@ -972,15 +968,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          const Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.location_pin,
                                 color: Color(0xFFEB5A73),
                                 size: 14,
                               ),
-                              const SizedBox(width: 4),
-                              const Text(
+                              SizedBox(width: 4),
+                              Text(
                                 'DELIVERING TO',
                                 style: TextStyle(
                                   fontSize: 12,
@@ -988,24 +984,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   color: Color(0xFFB7BDD3),
                                   fontWeight: FontWeight.w700,
                                 ),
-                              ),
-                              const Spacer(),
-                              _HeaderActionButton(
-                                icon: Icons.confirmation_num_outlined,
-                                onTap: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Offers coming soon'),
-                                    ),
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              _HeaderActionButton(
-                                icon: Icons.shopping_cart_outlined,
-                                onTap: () {
-                                  _openCart();
-                                },
                               ),
                             ],
                           ),
@@ -1019,13 +997,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      displayLocation,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                      locationText,
                                       style: const TextStyle(
                                         color: Colors.white,
-                                        fontSize: 29,
-                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15,
+                                        height: 1.35,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ),
@@ -1530,30 +1507,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _HeaderActionButton extends StatelessWidget {
-  const _HeaderActionButton({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Ink(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: const Color(0xFF3A3A5D),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(icon, color: Colors.white),
       ),
     );
   }
