@@ -1,39 +1,124 @@
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
+import 'package:babai_bazor_app/core/models/api_models.dart';
+import 'package:babai_bazor_app/core/services/home_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-class StaticOffersScreen extends StatelessWidget {
+Color _offerColorFromHex(String? rawHex, {Color fallback = const Color(0xFFF24A0D)}) {
+  final value = rawHex?.trim() ?? '';
+  if (value.isEmpty) {
+    return fallback;
+  }
+  var hex = value.replaceAll('#', '');
+  if (hex.length == 6) {
+    hex = 'FF$hex';
+  }
+  if (hex.length != 8) {
+    return fallback;
+  }
+  final parsed = int.tryParse(hex, radix: 16);
+  if (parsed == null) {
+    return fallback;
+  }
+  return Color(parsed);
+}
+
+class StaticOffersScreen extends StatefulWidget {
   const StaticOffersScreen({super.key, required this.language});
 
   final AppLanguage language;
 
   @override
+  State<StaticOffersScreen> createState() => _StaticOffersScreenState();
+}
+
+class _StaticOffersScreenState extends State<StaticOffersScreen> {
+  final HomeService _homeService = const HomeService();
+  final TextEditingController _couponController = TextEditingController();
+
+  static const _filters = ['All', 'Grocery', 'Services', 'Payment'];
+
+  bool _isLoading = true;
+  String? _error;
+  String _selectedFilter = 'All';
+  List<OfferSummary> _offers = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOffers();
+  }
+
+  @override
+  void dispose() {
+    _couponController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadOffers() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    final response = await _homeService.getOffers(language: widget.language);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = false;
+      _offers = response.data;
+      if (!response.isSuccess && response.data.isEmpty) {
+        _error = response.message ?? 'Unable to load offers.';
+      }
+    });
+  }
+
+  List<OfferSummary> get _visibleOffers {
+    if (_selectedFilter == 'All') {
+      return _offers;
+    }
+
+    final filter = _selectedFilter.toLowerCase();
+    return _offers.where((offer) {
+      final category = offer.categoryLabel().toLowerCase();
+      return category.contains(filter);
+    }).toList();
+  }
+
+  void _applyCouponCode() {
+    final code = _couponController.text.trim();
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a coupon code')),
+      );
+      return;
+    }
+
+    final match = _offers.where(
+      (offer) => (offer.code ?? '').trim().toUpperCase() == code.toUpperCase(),
+    );
+    if (match.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Coupon $code is not available')),
+      );
+      return;
+    }
+
+    Clipboard.setData(ClipboardData(text: code));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Copied $code')),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final offers = <_OfferItem>[
-      const _OfferItem(
-        title: 'Welcome Offer',
-        subtitle: 'All · Min ₹199',
-        discount: '50% off up to ₹150',
-        code: 'BABAI1',
-        validTill: 'Valid till: 31 May',
-        color: Color(0xFFF24A0D),
-      ),
-      const _OfferItem(
-        title: 'Fresh Farms',
-        subtitle: 'Grocery · Min ₹149',
-        discount: '40% off on veggies',
-        code: 'FARM40',
-        validTill: 'Valid till: 15 May',
-        color: Color(0xFF1FA857),
-      ),
-      const _OfferItem(
-        title: 'Home Service Deal',
-        subtitle: 'Services · Min ₹999',
-        discount: '₹200 off services',
-        code: 'HOME200',
-        validTill: 'Valid till: 30 May',
-        color: Color(0xFF2758D6),
-      ),
-    ];
+    final visibleOffers = _visibleOffers;
+    final countLabel = visibleOffers.length == 1
+        ? '1 coupon available'
+        : '${visibleOffers.length} coupons available';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F8),
@@ -45,10 +130,10 @@ class StaticOffersScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF161A2B)),
         ),
         titleSpacing: 0,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Coupons & Offers',
               style: TextStyle(
                 color: Color(0xFF14192D),
@@ -56,66 +141,114 @@ class StaticOffersScreen extends StatelessWidget {
                 fontSize: 24,
               ),
             ),
-            SizedBox(height: 2),
+            const SizedBox(height: 2),
             Text(
-              '5 coupons available',
-              style: TextStyle(color: Color(0xFF8E93A7), fontSize: 13),
+              _isLoading ? 'Loading offers...' : countLabel,
+              style: const TextStyle(color: Color(0xFF8E93A7), fontSize: 13),
             ),
           ],
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-        child: Column(
-          children: [
-            const Row(
-              children: [
-                _Chip(selected: true, text: 'All'),
-                SizedBox(width: 8),
-                _Chip(text: 'Grocery'),
-                SizedBox(width: 8),
-                _Chip(text: 'Services'),
-                SizedBox(width: 8),
-                _Chip(text: 'Payment'),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFD8CCFF)),
-              ),
-              child: Row(
+      body: RefreshIndicator(
+        onRefresh: _loadOffers,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                 children: [
-                  const Expanded(
-                    child: Text(
-                      '🎟️  Enter coupon code',
-                      style: TextStyle(
-                        color: Color(0xFF9AA0B6),
-                        fontWeight: FontWeight.w600,
-                      ),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < _filters.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 8),
+                          _Chip(
+                            selected: _selectedFilter == _filters[i],
+                            text: _filters[i],
+                            onTap: () {
+                              setState(() => _selectedFilter = _filters[i]);
+                            },
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6C3AE8),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFD8CCFF)),
                     ),
-                    child: const Text('Apply'),
+                    child: Row(
+                      children: [
+                        const Text('🎟️', style: TextStyle(fontSize: 18)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _couponController,
+                            textCapitalization: TextCapitalization.characters,
+                            decoration: const InputDecoration(
+                              hintText: 'Enter coupon code',
+                              hintStyle: TextStyle(
+                                color: Color(0xFF9AA0B6),
+                                fontWeight: FontWeight.w600,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: _applyCouponCode,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6C3AE8),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Apply'),
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(height: 14),
+                  if (_error != null && visibleOffers.isEmpty)
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.35,
+                      child: Center(
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(
+                            color: Color(0xFF6D6D6D),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (visibleOffers.isEmpty)
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.35,
+                      child: Center(
+                        child: Text(
+                          _selectedFilter == 'All'
+                              ? 'No offers available right now'
+                              : 'No offers in $_selectedFilter',
+                          style: const TextStyle(
+                            color: Color(0xFF6D6D6D),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    for (final offer in visibleOffers)
+                      _OfferTile(offer: offer, language: widget.language),
                 ],
               ),
-            ),
-            const SizedBox(height: 14),
-            ...offers.map((item) => _OfferTile(item: item)).toList(),
-          ],
-        ),
       ),
     );
   }
@@ -772,7 +905,200 @@ class StaticBookingHistoryScreen extends StatefulWidget {
 
 class _StaticBookingHistoryScreenState
     extends State<StaticBookingHistoryScreen> {
+  final HomeService _homeService = const HomeService();
+
   bool _upcoming = true;
+  bool _isLoading = true;
+  String? _error;
+  List<ServiceBookingSummary> _upcomingBookings = const [];
+  List<ServiceBookingSummary> _pastBookings = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBookings();
+  }
+
+  Future<void> _loadBookings() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    final pendingFuture = _homeService.getServiceBookings(
+      language: widget.language,
+      status: 'PENDING',
+    );
+    final confirmedFuture = _homeService.getServiceBookings(
+      language: widget.language,
+      status: 'CONFIRMED',
+    );
+    final completedFuture = _homeService.getServiceBookings(
+      language: widget.language,
+      status: 'COMPLETED',
+    );
+    final cancelledFuture = _homeService.getServiceBookings(
+      language: widget.language,
+      status: 'CANCELLED',
+    );
+
+    final results = await Future.wait([
+      pendingFuture,
+      confirmedFuture,
+      completedFuture,
+      cancelledFuture,
+    ]);
+
+    if (!mounted) {
+      return;
+    }
+
+    final upcoming = <ServiceBookingSummary>[
+      ...results[0].data,
+      ...results[1].data,
+    ];
+    final past = <ServiceBookingSummary>[
+      ...results[2].data,
+      ...results[3].data,
+    ];
+
+    String? error;
+    if (upcoming.isEmpty &&
+        past.isEmpty &&
+        results.any((response) => !response.isSuccess)) {
+      for (final response in results) {
+        final message = response.message?.trim();
+        if (!response.isSuccess && message != null && message.isNotEmpty) {
+          error = message;
+          break;
+        }
+      }
+      error ??= 'Unable to load bookings.';
+    }
+
+    setState(() {
+      _isLoading = false;
+      _upcomingBookings = upcoming;
+      _pastBookings = past;
+      _error = error;
+    });
+  }
+
+  String _formatRupees(double? value) {
+    if (value == null) {
+      return '₹--';
+    }
+    if (value == value.roundToDouble()) {
+      return '₹${value.toStringAsFixed(0)}';
+    }
+    return '₹${value.toStringAsFixed(2)}';
+  }
+
+  Color _statusColor(String? status) {
+    switch ((status ?? '').toUpperCase()) {
+      case 'PENDING':
+        return const Color(0xFFF59E0B);
+      case 'CONFIRMED':
+        return const Color(0xFF2758D6);
+      case 'COMPLETED':
+        return const Color(0xFF1FB165);
+      case 'CANCELLED':
+        return const Color(0xFFE8420A);
+      default:
+        return const Color(0xFF6A7289);
+    }
+  }
+
+  Color _statusBackground(String? status) {
+    switch ((status ?? '').toUpperCase()) {
+      case 'PENDING':
+        return const Color(0xFFFFF0C8);
+      case 'CONFIRMED':
+        return const Color(0xFFE4EAFB);
+      case 'COMPLETED':
+        return const Color(0xFFEAF6EE);
+      case 'CANCELLED':
+        return const Color(0xFFFFEFE7);
+      default:
+        return const Color(0xFFF0F2F8);
+    }
+  }
+
+  List<Widget> _buildBookingList() {
+    final bookings = _upcoming ? _upcomingBookings : _pastBookings;
+
+    if (_error != null && bookings.isEmpty) {
+      return [
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.45,
+          child: Center(
+            child: Text(
+              _error!,
+              style: const TextStyle(
+                color: Color(0xFF6D6D6D),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    if (bookings.isEmpty) {
+      return [
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.45,
+          child: Center(
+            child: Text(
+              _upcoming ? 'No upcoming bookings' : 'No past bookings',
+              style: const TextStyle(
+                color: Color(0xFF6D6D6D),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    if (_upcoming) {
+      return [
+        for (var i = 0; i < bookings.length; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          _UpcomingCard(
+            title: bookings[i].serviceName ?? 'Service booking',
+            subtitle: bookings[i].scheduleLabel,
+            pro: bookings[i].professionalName ?? 'Professional pending',
+            amount: _formatRupees(bookings[i].amount),
+            status: (bookings[i].status ?? 'PENDING').toUpperCase(),
+            statusColor: _statusColor(bookings[i].status),
+            statusBackground: _statusBackground(bookings[i].status),
+            emoji: bookings[i].emoji ?? '🔧',
+            onTrack: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Tracking will be available soon')),
+              );
+            },
+          ),
+        ],
+      ];
+    }
+
+    return [
+      for (var i = 0; i < bookings.length; i++) ...[
+        if (i > 0) const SizedBox(height: 12),
+        _PastCard(
+          title: bookings[i].serviceName ?? 'Service booking',
+          subtitle: bookings[i].scheduleLabel,
+          pro: bookings[i].professionalName ?? '—',
+          amount: _formatRupees(bookings[i].amount),
+          status: (bookings[i].status ?? 'COMPLETED').toUpperCase(),
+          stars: bookings[i].rating ?? 0,
+          emoji: bookings[i].emoji ?? '🔧',
+        ),
+      ],
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -811,69 +1137,39 @@ class _StaticBookingHistoryScreenState
                   child: _HistoryTab(
                     text: 'Upcoming Bookings',
                     selected: _upcoming,
-                    onTap: () => setState(() => _upcoming = true),
+                    onTap: () {
+                      if (_upcoming) {
+                        return;
+                      }
+                      setState(() => _upcoming = true);
+                    },
                   ),
                 ),
                 Expanded(
                   child: _HistoryTab(
                     text: 'Past Bookings',
                     selected: !_upcoming,
-                    onTap: () => setState(() => _upcoming = false),
+                    onTap: () {
+                      if (!_upcoming) {
+                        return;
+                      }
+                      setState(() => _upcoming = false);
+                    },
                   ),
                 ),
               ],
             ),
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(8, 12, 8, 88),
-              children: _upcoming
-                  ? [
-                      _UpcomingCard(
-                        onTrack: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => StaticBookingTrackingScreen(
-                                language: widget.language,
-                                service: _mockServices.first,
-                                timeText: 'Today, 2:00 PM',
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ]
-                  : const [
-                      _PastCard(
-                        title: 'Bathroom Deep Clean',
-                        subtitle: 'Yesterday, 10 AM',
-                        pro: 'Priya Singh',
-                        amount: '₹299',
-                        status: 'COMPLETED',
-                        stars: 4,
-                        emoji: '🚿',
-                      ),
-                      SizedBox(height: 12),
-                      _PastCard(
-                        title: 'Grocery Order #BB003',
-                        subtitle: '3 May, 3 PM',
-                        pro: 'Delivered',
-                        amount: '₹342',
-                        status: 'COMPLETED',
-                        stars: 5,
-                        emoji: '🛒',
-                      ),
-                      SizedBox(height: 12),
-                      _PastCard(
-                        title: 'Fan Installation',
-                        subtitle: '1 May, 11 AM',
-                        pro: 'Ravi Kumar',
-                        amount: '₹199',
-                        status: 'CANCELLED',
-                        stars: 0,
-                        emoji: '🪭',
-                      ),
-                    ],
+            child: RefreshIndicator(
+              onRefresh: _loadBookings,
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(8, 12, 8, 88),
+                      children: _buildBookingList(),
+                    ),
             ),
           ),
         ],
@@ -1278,24 +1574,6 @@ class StaticProfileMenuScreen extends StatelessWidget {
   }
 }
 
-class _OfferItem {
-  const _OfferItem({
-    required this.title,
-    required this.subtitle,
-    required this.discount,
-    required this.code,
-    required this.validTill,
-    required this.color,
-  });
-
-  final String title;
-  final String subtitle;
-  final String discount;
-  final String code;
-  final String validTill;
-  final Color color;
-}
-
 class _ServiceItem {
   const _ServiceItem({
     required this.title,
@@ -1383,12 +1661,18 @@ class _TimeSlot {
 }
 
 class _OfferTile extends StatelessWidget {
-  const _OfferTile({required this.item});
+  const _OfferTile({required this.offer, required this.language});
 
-  final _OfferItem item;
+  final OfferSummary offer;
+  final AppLanguage language;
 
   @override
   Widget build(BuildContext context) {
+    final accent = _offerColorFromHex(offer.color);
+    final code = (offer.code ?? '').trim();
+    final validTill = offer.validTillLabel();
+    final emoji = (offer.emoji ?? '').trim();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -1402,7 +1686,7 @@ class _OfferTile extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
             decoration: BoxDecoration(
-              color: item.color,
+              color: accent,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(18),
                 topRight: Radius.circular(18),
@@ -1418,7 +1702,10 @@ class _OfferTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
-                  child: const Text('🎟️', style: TextStyle(fontSize: 22)),
+                  child: Text(
+                    emoji.isNotEmpty ? emoji : '🎟️',
+                    style: const TextStyle(fontSize: 22),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -1426,7 +1713,7 @@ class _OfferTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.title,
+                        offer.localizedTitle(language),
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
@@ -1434,7 +1721,7 @@ class _OfferTile extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        item.subtitle,
+                        offer.contextLabel(),
                         style: const TextStyle(
                           color: Color(0xFFEAF4FF),
                           fontWeight: FontWeight.w600,
@@ -1443,23 +1730,24 @@ class _OfferTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    item.code,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
+                if (code.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      code,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -1472,39 +1760,46 @@ class _OfferTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.discount,
+                        offer.discountLabel(),
                         style: const TextStyle(
                           color: Color(0xFF2C3252),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.validTill,
-                        style: const TextStyle(
-                          color: Color(0xFF9AA0B6),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
+                      if (validTill.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          validTill,
+                          style: const TextStyle(
+                            color: Color(0xFF9AA0B6),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
-                OutlinedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Copied ${item.code}')),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: item.color.withValues(alpha: 0.45)),
-                    foregroundColor: item.color,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                if (code.isNotEmpty)
+                  OutlinedButton(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: code));
+                      if (!context.mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Copied $code')),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: accent.withValues(alpha: 0.45)),
+                      foregroundColor: accent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
+                    child: const Text('Copy Code'),
                   ),
-                  child: const Text('Copy Code'),
-                ),
               ],
             ),
           ),
@@ -2023,8 +2318,26 @@ class _HistoryTab extends StatelessWidget {
 }
 
 class _UpcomingCard extends StatelessWidget {
-  const _UpcomingCard({required this.onTrack});
+  const _UpcomingCard({
+    required this.title,
+    required this.subtitle,
+    required this.pro,
+    required this.amount,
+    required this.status,
+    required this.statusColor,
+    required this.statusBackground,
+    required this.emoji,
+    required this.onTrack,
+  });
 
+  final String title;
+  final String subtitle;
+  final String pro;
+  final String amount;
+  final String status;
+  final Color statusColor;
+  final Color statusBackground;
+  final String emoji;
   final VoidCallback onTrack;
 
   @override
@@ -2048,32 +2361,34 @@ class _UpcomingCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
-                child: const Text('🏠', style: TextStyle(fontSize: 34)),
+                child: Text(emoji, style: const TextStyle(fontSize: 34)),
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Full Home Deep Clean',
-                      style: TextStyle(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         color: Color(0xFF14192D),
                         fontWeight: FontWeight.w800,
                         fontSize: 19,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      '🕒 Today, 2:00 PM',
-                      style: TextStyle(
+                      '🕒 $subtitle',
+                      style: const TextStyle(
                         color: Color(0xFF8A90A4),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
-                      '👷 Ravi Kumar',
-                      style: TextStyle(
+                      '👷 $pro',
+                      style: const TextStyle(
                         color: Color(0xFF8A90A4),
                         fontWeight: FontWeight.w600,
                       ),
@@ -2082,18 +2397,18 @@ class _UpcomingCard extends StatelessWidget {
                 ),
               ),
               _SmallTag(
-                text: 'CONFIRMED',
-                color: Color(0xFF2758D6),
-                bg: Color(0xFFE4EAFB),
+                text: status,
+                color: statusColor,
+                bg: statusBackground,
               ),
             ],
           ),
           const SizedBox(height: 8),
-          const Align(
+          Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              '₹999',
-              style: TextStyle(
+              amount,
+              style: const TextStyle(
                 color: Color(0xFF14192D),
                 fontWeight: FontWeight.w900,
                 fontSize: 40,
@@ -2294,27 +2609,36 @@ class _PastCard extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip({this.selected = false, required this.text});
+  const _Chip({
+    this.selected = false,
+    required this.text,
+    this.onTap,
+  });
 
   final bool selected;
   final String text;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFF6C3AE8) : const Color(0xFFF3F4F8),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: selected ? const Color(0xFF6C3AE8) : const Color(0xFFD7DBE8),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF6C3AE8) : const Color(0xFFF3F4F8),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? const Color(0xFF6C3AE8) : const Color(0xFFD7DBE8),
+          ),
         ),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: selected ? Colors.white : const Color(0xFF4F5675),
-          fontWeight: FontWeight.w700,
+        child: Text(
+          text,
+          style: TextStyle(
+            color: selected ? Colors.white : const Color(0xFF4F5675),
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );

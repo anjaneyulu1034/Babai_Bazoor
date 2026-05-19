@@ -97,18 +97,31 @@ class LocationApiEndpoints {
       '${ApiConstants.baseUrl}${ApiConstants.apiV1}/location/check-pincode',
     );
   }
+
+  static Uri setLocation() {
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/pincode/set-location',
+    );
+  }
 }
 
 class HomeApiEndpoints {
   const HomeApiEndpoints._();
 
-  static Uri home({required String pincode, String? languageCode}) {
-    final query = <String, String>{'pincode': pincode.trim()};
+  static Uri dashboard({String? pincode, String? languageCode}) {
+    final query = <String, String>{};
+    final normalizedPincode = pincode?.trim();
+    if (normalizedPincode != null && normalizedPincode.isNotEmpty) {
+      query['pincode'] = normalizedPincode;
+    }
     ApiConstants.addLanguageQuery(query, languageCode);
     return Uri.parse(
       '${ApiConstants.baseUrl}${ApiConstants.api}/dashboard',
-    ).replace(queryParameters: query);
+    ).replace(queryParameters: query.isEmpty ? null : query);
   }
+
+  static Uri home({String? pincode, String? languageCode}) =>
+      dashboard(pincode: pincode, languageCode: languageCode);
 
   static Uri sections({
     required String pincode,
@@ -143,6 +156,120 @@ class HomeApiEndpoints {
     return Uri.parse(
       '${ApiConstants.baseUrl}${ApiConstants.apiV1}/home/search',
     ).replace(queryParameters: params);
+  }
+}
+
+class OfferApiEndpoints {
+  const OfferApiEndpoints._();
+
+  static Uri list({String? languageCode}) {
+    final query = <String, String>{};
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/offers',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+  }
+}
+
+class PromoApiEndpoints {
+  const PromoApiEndpoints._();
+
+  static Uri list({String? applicableOn, String? languageCode}) {
+    final query = <String, String>{};
+    final normalizedApplicableOn = applicableOn?.trim();
+    if (normalizedApplicableOn != null && normalizedApplicableOn.isNotEmpty) {
+      query['applicableOn'] = normalizedApplicableOn;
+    }
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/promo-codes',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+  }
+}
+
+class ServicesApiEndpoints {
+  const ServicesApiEndpoints._();
+
+  static Uri list({int? pageNumber, int? pageSize, String? languageCode}) {
+    final query = <String, String>{};
+    if (pageNumber != null) {
+      query['page'] = '$pageNumber';
+    }
+    if (pageSize != null) {
+      query['pageSize'] = '$pageSize';
+    }
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/services',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+  }
+
+  static Uri bookingsList({
+    String? status,
+    int? pageNumber,
+    String? languageCode,
+  }) {
+    final query = <String, String>{};
+    final normalizedStatus = status?.trim().toUpperCase();
+    if (normalizedStatus != null && normalizedStatus.isNotEmpty) {
+      query['status'] = normalizedStatus;
+    }
+    if (pageNumber != null) {
+      query['page'] = '$pageNumber';
+    }
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/services/bookings',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+  }
+
+  static Uri details(int id, {String? languageCode}) {
+    final query = <String, String>{};
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/services/$id',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+  }
+
+  static Uri slotsByService(
+    int id, {
+    required String slotDate,
+    String? languageCode,
+  }) {
+    final query = <String, String>{'slotDate': slotDate};
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/services/$id/slots',
+    ).replace(queryParameters: query);
+  }
+
+  static Uri slots({
+    required int serviceId,
+    required String slotDate,
+    String? languageCode,
+  }) {
+    final query = <String, String>{
+      'serviceId': '$serviceId',
+      'slotDate': slotDate,
+    };
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/services/slots',
+    ).replace(queryParameters: query);
+  }
+
+  static Uri professionals(int id, {String? languageCode}) {
+    final query = <String, String>{};
+    ApiConstants.addLanguageQuery(query, languageCode);
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/services/$id/professionals',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+  }
+
+  static Uri createBooking() {
+    return Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.api}/services/bookings',
+    );
   }
 }
 

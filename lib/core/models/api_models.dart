@@ -51,6 +51,8 @@ class HomeApiResponse {
     this.banners = const [],
     this.categories = const [],
     this.featuredProducts = const [],
+    this.featuredServices = const [],
+    this.promoCodes = const [],
   });
 
   final String? currentLocation;
@@ -58,6 +60,8 @@ class HomeApiResponse {
   final List<HomeBannerSummary> banners;
   final List<CategorySummary> categories;
   final List<ProductSummary> featuredProducts;
+  final List<ServiceSummary> featuredServices;
+  final List<PromoCodeSummary> promoCodes;
 
   factory HomeApiResponse.fromHttp(int statusCode, String rawBody) {
     if (statusCode < 200 || statusCode >= 300) {
@@ -80,6 +84,12 @@ class HomeApiResponse {
     final featuredProducts = _ApiModelParser.toMapList(
       dataMap['featuredProducts'],
     ).map(ProductSummary.fromJson).toList();
+    final featuredServices = _ApiModelParser.toMapList(
+      dataMap['featuredServices'],
+    ).map(ServiceSummary.fromJson).toList();
+    final promoCodes = _ApiModelParser.toMapList(
+      dataMap['promoCodes'],
+    ).map(PromoCodeSummary.fromJson).toList();
 
     final location =
         _ApiModelParser.pickFirstString(dataMap, const [
@@ -129,6 +139,8 @@ class HomeApiResponse {
       banners: banners,
       categories: categories,
       featuredProducts: featuredProducts,
+      featuredServices: featuredServices,
+      promoCodes: promoCodes,
     );
   }
 
@@ -138,11 +150,696 @@ class HomeApiResponse {
   }
 }
 
+class ServiceSummary {
+  const ServiceSummary({
+    required this.id,
+    required this.name,
+    this.subCategoryId,
+    this.emoji,
+    this.price,
+    this.mrp,
+    this.durationLabel,
+    this.imageUrl,
+    this.rating,
+    this.reviewCount,
+    this.isFeatured,
+    this.sortOrder,
+    this.description,
+    this.nameEn,
+    this.nameTe,
+    this.discount,
+    this.instructions = const [],
+    this.includes = const [],
+  });
+
+  final int id;
+  final String name;
+  final int? subCategoryId;
+  final String? emoji;
+  final double? price;
+  final double? mrp;
+  final String? durationLabel;
+  final String? imageUrl;
+  final double? rating;
+  final int? reviewCount;
+  final bool? isFeatured;
+  final int? sortOrder;
+  final String? description;
+  final String? nameEn;
+  final String? nameTe;
+  final int? discount;
+  final List<String> instructions;
+  final List<String> includes;
+
+  factory ServiceSummary.fromJson(Map<String, dynamic> json) {
+    return ServiceSummary(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      name:
+          _ApiModelParser.toStringValue(json['name']) ??
+          _ApiModelParser.toStringValue(json['nameEn']) ??
+          _ApiModelParser.toStringValue(json['nameTe']) ??
+          _ApiModelParser.toStringValue(json['title']) ??
+          '',
+      subCategoryId: _ApiModelParser.toInt(json['subCategoryId']),
+      emoji: _ApiModelParser.toStringValue(json['emoji']),
+      price: _ApiModelParser.toDouble(json['price']),
+      mrp: _ApiModelParser.toDouble(json['mrp']),
+      durationLabel: _ApiModelParser.toStringValue(json['durationLabel']),
+      imageUrl: _ApiModelParser.toStringValue(json['imageUrl']),
+      rating: _ApiModelParser.toDouble(json['rating']),
+      reviewCount: _ApiModelParser.toInt(json['reviewCount']),
+      isFeatured: _ApiModelParser.toBool(json['isFeatured']),
+      sortOrder: _ApiModelParser.toInt(json['sortOrder']),
+      description:
+          _ApiModelParser.toStringValue(json['desc']) ??
+          _ApiModelParser.toStringValue(json['description']),
+      nameEn: _ApiModelParser.toStringValue(json['nameEn']),
+      nameTe: _ApiModelParser.toStringValue(json['nameTe']),
+      discount:
+          _ApiModelParser.toInt(json['discount']) ??
+          _ApiModelParser.toInt(json['discountPct']),
+      instructions: _ApiModelParser.toStringList(json['instructions']),
+      includes: _ApiModelParser.toStringList(json['includes']),
+    );
+  }
+
+  String localizedName(AppLanguage language) {
+    final preferred = language == AppLanguage.te ? nameTe : nameEn;
+    if ((preferred ?? '').trim().isNotEmpty) {
+      return preferred!.trim();
+    }
+    final fallback = language == AppLanguage.te ? nameEn : nameTe;
+    if ((fallback ?? '').trim().isNotEmpty) {
+      return fallback!.trim();
+    }
+    return name;
+  }
+}
+
+class OfferSummary {
+  const OfferSummary({
+    required this.id,
+    this.code,
+    this.title,
+    this.titleEn,
+    this.titleTe,
+    this.subtitle,
+    this.discountType,
+    this.discountValue,
+    this.maxDiscount,
+    this.minOrderValue,
+    this.applicableOn,
+    this.color,
+    this.validTill,
+    this.emoji,
+  });
+
+  final int id;
+  final String? code;
+  final String? title;
+  final String? titleEn;
+  final String? titleTe;
+  final String? subtitle;
+  final String? discountType;
+  final double? discountValue;
+  final double? maxDiscount;
+  final double? minOrderValue;
+  final String? applicableOn;
+  final String? color;
+  final String? validTill;
+  final String? emoji;
+
+  factory OfferSummary.fromJson(Map<String, dynamic> json) {
+    return OfferSummary(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      code: _ApiModelParser.toStringValue(json['code']),
+      title: _ApiModelParser.toStringValue(json['title']),
+      titleEn: _ApiModelParser.toStringValue(json['titleEn']),
+      titleTe: _ApiModelParser.toStringValue(json['titleTe']),
+      subtitle:
+          _ApiModelParser.toStringValue(json['subtitle']) ??
+          _ApiModelParser.toStringValue(json['description']),
+      discountType: _ApiModelParser.toStringValue(json['discountType']),
+      discountValue: _ApiModelParser.toDouble(json['discountValue']),
+      maxDiscount: _ApiModelParser.toDouble(json['maxDiscount']),
+      minOrderValue: _ApiModelParser.toDouble(json['minOrderValue']),
+      applicableOn: _ApiModelParser.toStringValue(json['applicableOn']),
+      color: _ApiModelParser.toStringValue(json['color']),
+      validTill:
+          _ApiModelParser.toStringValue(json['validTill']) ??
+          _ApiModelParser.toStringValue(json['validUntil']) ??
+          _ApiModelParser.toStringValue(json['expiryDate']) ??
+          _ApiModelParser.toStringValue(json['endDate']),
+      emoji: _ApiModelParser.toStringValue(json['emoji']),
+    );
+  }
+
+  String localizedTitle(AppLanguage language) {
+    final preferred = language == AppLanguage.te ? titleTe : titleEn;
+    if ((preferred ?? '').trim().isNotEmpty) {
+      return preferred!.trim();
+    }
+
+    final fallback = language == AppLanguage.te ? titleEn : titleTe;
+    if ((fallback ?? '').trim().isNotEmpty) {
+      return fallback!.trim();
+    }
+
+    final baseTitle = title?.trim();
+    if (baseTitle != null && baseTitle.isNotEmpty) {
+      return baseTitle;
+    }
+
+    final promoCode = code?.trim();
+    if (promoCode != null && promoCode.isNotEmpty) {
+      return promoCode;
+    }
+    return 'Offer';
+  }
+
+  String categoryLabel() {
+    final on = applicableOn?.trim();
+    if (on == null || on.isEmpty) {
+      return 'All';
+    }
+    return on;
+  }
+
+  String contextLabel() {
+    final explicit = subtitle?.trim();
+    if (explicit != null && explicit.isNotEmpty) {
+      return explicit;
+    }
+
+    final category = categoryLabel();
+    final minOrder = minOrderValue;
+    if (minOrder != null && minOrder > 0) {
+      final amount = minOrder == minOrder.roundToDouble()
+          ? minOrder.toStringAsFixed(0)
+          : minOrder.toStringAsFixed(2);
+      return '$category · Min ₹$amount';
+    }
+    return category;
+  }
+
+  String discountLabel() {
+    final type = (discountType ?? '').toUpperCase();
+    if (type == 'FREE_DELIVERY') {
+      final minOrder = minOrderValue;
+      if (minOrder != null && minOrder > 0) {
+        final amount = minOrder == minOrder.roundToDouble()
+            ? minOrder.toStringAsFixed(0)
+            : minOrder.toStringAsFixed(2);
+        return 'Free delivery above ₹$amount';
+      }
+      return 'Free delivery';
+    }
+
+    if (type == 'PERCENT') {
+      final value = discountValue;
+      if (value != null) {
+        final pct = value == value.roundToDouble()
+            ? value.toStringAsFixed(0)
+            : value.toStringAsFixed(1);
+        final cap = maxDiscount;
+        if (cap != null && cap > 0) {
+          final capText = cap == cap.roundToDouble()
+              ? cap.toStringAsFixed(0)
+              : cap.toStringAsFixed(2);
+          return '$pct% off up to ₹$capText';
+        }
+        return '$pct% off';
+      }
+    }
+
+    if (type == 'FLAT') {
+      final value = discountValue;
+      if (value != null) {
+        final amount = value == value.roundToDouble()
+            ? value.toStringAsFixed(0)
+            : value.toStringAsFixed(2);
+        return '₹$amount off';
+      }
+    }
+
+    return 'Offer available';
+  }
+
+  String validTillLabel() {
+    final raw = validTill?.trim();
+    if (raw == null || raw.isEmpty) {
+      return '';
+    }
+
+    final parsed = DateTime.tryParse(raw);
+    if (parsed != null) {
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return 'Valid till: ${parsed.day} ${months[parsed.month - 1]}';
+    }
+
+    if (raw.toLowerCase().startsWith('valid')) {
+      return raw;
+    }
+    return 'Valid till: $raw';
+  }
+}
+
+class OffersListApiResponse {
+  const OffersListApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.total,
+    this.page,
+    this.data = const [],
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final int? total;
+  final int? page;
+  final List<OfferSummary> data;
+  final List<String> errors;
+
+  factory OffersListApiResponse.fromHttp(int statusCode, String rawBody) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final dataList = _ApiModelParser.toMapList(payload?['data']);
+    final directList = _ApiModelParser.decodeMapList(rawBody);
+    final parsed = dataList.isNotEmpty ? dataList : directList;
+
+    return OffersListApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      total: _ApiModelParser.toInt(payload?['total']),
+      page: _ApiModelParser.toInt(payload?['page']),
+      data: parsed.map(OfferSummary.fromJson).toList(),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
+class PromoCodeSummary {
+  const PromoCodeSummary({
+    required this.id,
+    required this.code,
+    this.title,
+    this.titleEn,
+    this.titleTe,
+    this.discountType,
+    this.discountValue,
+    this.maxDiscount,
+    this.minOrderValue,
+    this.applicableOn,
+    this.color,
+  });
+
+  final int id;
+  final String code;
+  final String? title;
+  final String? titleEn;
+  final String? titleTe;
+  final String? discountType;
+  final double? discountValue;
+  final double? maxDiscount;
+  final double? minOrderValue;
+  final String? applicableOn;
+  final String? color;
+
+  factory PromoCodeSummary.fromJson(Map<String, dynamic> json) {
+    return PromoCodeSummary(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      code: _ApiModelParser.toStringValue(json['code']) ?? '',
+      title: _ApiModelParser.toStringValue(json['title']),
+      titleEn: _ApiModelParser.toStringValue(json['titleEn']),
+      titleTe: _ApiModelParser.toStringValue(json['titleTe']),
+      discountType: _ApiModelParser.toStringValue(json['discountType']),
+      discountValue: _ApiModelParser.toDouble(json['discountValue']),
+      maxDiscount: _ApiModelParser.toDouble(json['maxDiscount']),
+      minOrderValue: _ApiModelParser.toDouble(json['minOrderValue']),
+      applicableOn: _ApiModelParser.toStringValue(json['applicableOn']),
+      color: _ApiModelParser.toStringValue(json['color']),
+    );
+  }
+
+  String localizedTitle(AppLanguage language) {
+    final preferred = language == AppLanguage.te ? titleTe : titleEn;
+    if ((preferred ?? '').trim().isNotEmpty) {
+      return preferred!.trim();
+    }
+
+    final fallback = language == AppLanguage.te ? titleEn : titleTe;
+    if ((fallback ?? '').trim().isNotEmpty) {
+      return fallback!.trim();
+    }
+
+    final baseTitle = title?.trim();
+    if (baseTitle != null && baseTitle.isNotEmpty) {
+      return baseTitle;
+    }
+    return code;
+  }
+}
+
+class PromoCodesListApiResponse {
+  const PromoCodesListApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.data = const [],
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final List<PromoCodeSummary> data;
+  final List<String> errors;
+
+  factory PromoCodesListApiResponse.fromHttp(int statusCode, String rawBody) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final dataList = _ApiModelParser.toMapList(payload?['data']);
+    final directList = _ApiModelParser.decodeMapList(rawBody);
+    final parsed = dataList.isNotEmpty ? dataList : directList;
+
+    return PromoCodesListApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      data: parsed.map(PromoCodeSummary.fromJson).toList(),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
+class ServicesListApiResponse {
+  const ServicesListApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.total,
+    this.page,
+    this.data = const [],
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final int? total;
+  final int? page;
+  final List<ServiceSummary> data;
+  final List<String> errors;
+
+  factory ServicesListApiResponse.fromHttp(int statusCode, String rawBody) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final dataList = _ApiModelParser.toMapList(payload?['data']);
+
+    return ServicesListApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      total: _ApiModelParser.toInt(payload?['total']),
+      page: _ApiModelParser.toInt(payload?['page']),
+      data: dataList.map(ServiceSummary.fromJson).toList(),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
+class ServiceSlotSummary {
+  const ServiceSlotSummary({
+    required this.id,
+    required this.slotTime,
+    this.label,
+    this.isAvailable,
+  });
+
+  final int id;
+  final String slotTime;
+  final String? label;
+  final bool? isAvailable;
+
+  factory ServiceSlotSummary.fromJson(Map<String, dynamic> json) {
+    final time =
+        _ApiModelParser.toStringValue(json['slotTime']) ??
+        _ApiModelParser.toStringValue(json['time']) ??
+        _ApiModelParser.toStringValue(json['startTime']) ??
+        '';
+    return ServiceSlotSummary(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      slotTime: time,
+      label:
+          _ApiModelParser.toStringValue(json['label']) ??
+          _ApiModelParser.toStringValue(json['displayTime']),
+      isAvailable:
+          _ApiModelParser.toBool(json['isAvailable']) ??
+          (!(_ApiModelParser.toBool(json['booked']) ?? false)),
+    );
+  }
+}
+
+class ServiceSlotsApiResponse {
+  const ServiceSlotsApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.data = const [],
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final List<ServiceSlotSummary> data;
+  final List<String> errors;
+
+  factory ServiceSlotsApiResponse.fromHttp(int statusCode, String rawBody) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final dataMap = _ApiModelParser.toMap(payload?['data']);
+    final list = dataMap == null
+        ? _ApiModelParser.toMapList(payload?['data'])
+        : (_ApiModelParser.toMapList(dataMap['slots']).isNotEmpty
+              ? _ApiModelParser.toMapList(dataMap['slots'])
+              : _ApiModelParser.toMapList(dataMap['items']));
+    final directList = _ApiModelParser.decodeMapList(rawBody);
+    final parsed = list.isNotEmpty ? list : directList;
+
+    return ServiceSlotsApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      data: parsed.map(ServiceSlotSummary.fromJson).toList(),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
+class ServiceProfessionalSummary {
+  const ServiceProfessionalSummary({
+    required this.id,
+    required this.name,
+    this.rating,
+    this.tag,
+  });
+
+  final int id;
+  final String name;
+  final double? rating;
+  final String? tag;
+
+  factory ServiceProfessionalSummary.fromJson(Map<String, dynamic> json) {
+    return ServiceProfessionalSummary(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      name:
+          _ApiModelParser.toStringValue(json['name']) ??
+          _ApiModelParser.toStringValue(json['fullName']) ??
+          'Professional',
+      rating: _ApiModelParser.toDouble(json['rating']),
+      tag:
+          _ApiModelParser.toStringValue(json['tag']) ??
+          _ApiModelParser.toStringValue(json['badge']),
+    );
+  }
+}
+
+class ServiceProfessionalsApiResponse {
+  const ServiceProfessionalsApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.data = const [],
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final List<ServiceProfessionalSummary> data;
+  final List<String> errors;
+
+  factory ServiceProfessionalsApiResponse.fromHttp(
+    int statusCode,
+    String rawBody,
+  ) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final list = _ApiModelParser.toMapList(payload?['data']);
+    final directList = _ApiModelParser.decodeMapList(rawBody);
+    final parsed = list.isNotEmpty ? list : directList;
+
+    return ServiceProfessionalsApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      data: parsed.map(ServiceProfessionalSummary.fromJson).toList(),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
+class ServiceBookingApiResponse {
+  const ServiceBookingApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.bookingId,
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final int? bookingId;
+  final List<String> errors;
+
+  factory ServiceBookingApiResponse.fromHttp(int statusCode, String rawBody) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final dataMap = _ApiModelParser.toMap(payload?['data']);
+    return ServiceBookingApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      bookingId:
+          _ApiModelParser.toInt(dataMap?['id']) ??
+          _ApiModelParser.toInt(payload?['id']),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
+class ServiceBookingSummary {
+  const ServiceBookingSummary({
+    required this.id,
+    this.serviceId,
+    this.serviceName,
+    this.status,
+    this.slotDate,
+    this.slotTime,
+    this.amount,
+    this.professionalName,
+    this.emoji,
+    this.rating,
+  });
+
+  final int id;
+  final int? serviceId;
+  final String? serviceName;
+  final String? status;
+  final String? slotDate;
+  final String? slotTime;
+  final double? amount;
+  final String? professionalName;
+  final String? emoji;
+  final int? rating;
+
+  factory ServiceBookingSummary.fromJson(Map<String, dynamic> json) {
+    final serviceMap = _ApiModelParser.toMap(json['service']);
+    return ServiceBookingSummary(
+      id: _ApiModelParser.toInt(json['id']) ?? 0,
+      serviceId:
+          _ApiModelParser.toInt(json['serviceId']) ??
+          _ApiModelParser.toInt(serviceMap?['id']),
+      serviceName:
+          _ApiModelParser.toStringValue(json['serviceName']) ??
+          _ApiModelParser.toStringValue(json['name']) ??
+          _ApiModelParser.toStringValue(serviceMap?['name']) ??
+          _ApiModelParser.toStringValue(serviceMap?['nameEn']),
+      status: _ApiModelParser.toStringValue(json['status']),
+      slotDate: _ApiModelParser.toStringValue(json['slotDate']),
+      slotTime:
+          _ApiModelParser.toStringValue(json['slotTime']) ??
+          _ApiModelParser.toStringValue(json['scheduledTime']),
+      amount:
+          _ApiModelParser.toDouble(json['amount']) ??
+          _ApiModelParser.toDouble(json['price']) ??
+          _ApiModelParser.toDouble(json['totalAmount']),
+      professionalName:
+          _ApiModelParser.toStringValue(json['professionalName']) ??
+          _ApiModelParser.toStringValue(json['servicePersonName']) ??
+          _ApiModelParser.toStringValue(json['assignedTo']),
+      emoji:
+          _ApiModelParser.toStringValue(json['emoji']) ??
+          _ApiModelParser.toStringValue(serviceMap?['emoji']),
+      rating: _ApiModelParser.toInt(json['rating']),
+    );
+  }
+
+  String get scheduleLabel {
+    final date = slotDate?.trim();
+    final time = slotTime?.trim();
+    if ((date ?? '').isNotEmpty && (time ?? '').isNotEmpty) {
+      return '$date, $time';
+    }
+    if ((date ?? '').isNotEmpty) {
+      return date!;
+    }
+    if ((time ?? '').isNotEmpty) {
+      return time!;
+    }
+    return 'Schedule pending';
+  }
+}
+
+class ServiceBookingsListApiResponse {
+  const ServiceBookingsListApiResponse({
+    required this.isSuccess,
+    this.message,
+    this.total,
+    this.page,
+    this.data = const [],
+    this.errors = const [],
+  });
+
+  final bool isSuccess;
+  final String? message;
+  final int? total;
+  final int? page;
+  final List<ServiceBookingSummary> data;
+  final List<String> errors;
+
+  factory ServiceBookingsListApiResponse.fromHttp(
+    int statusCode,
+    String rawBody,
+  ) {
+    final payload = _ApiModelParser.decodeObject(rawBody);
+    final dataList = _ApiModelParser.toMapList(payload?['data']);
+
+    return ServiceBookingsListApiResponse(
+      isSuccess: statusCode >= 200 && statusCode < 300,
+      message: _ApiModelParser.extractMessage(payload),
+      total: _ApiModelParser.toInt(payload?['total']),
+      page: _ApiModelParser.toInt(payload?['page']),
+      data: dataList.map(ServiceBookingSummary.fromJson).toList(),
+      errors: _ApiModelParser.toStringList(payload?['errors']),
+    );
+  }
+}
+
 class HomeBannerSummary {
   const HomeBannerSummary({
     required this.id,
     this.title,
     this.subtitle,
+    this.emoji,
+    this.gradient,
+    this.couponCode,
     this.imageUrl,
     this.linkedCategoryId,
     this.linkedProductId,
@@ -152,6 +849,9 @@ class HomeBannerSummary {
   final int id;
   final String? title;
   final String? subtitle;
+  final String? emoji;
+  final String? gradient;
+  final String? couponCode;
   final String? imageUrl;
   final int? linkedCategoryId;
   final int? linkedProductId;
@@ -162,6 +862,9 @@ class HomeBannerSummary {
       id: _ApiModelParser.toInt(json['id']) ?? 0,
       title: _ApiModelParser.toStringValue(json['title']),
       subtitle: _ApiModelParser.toStringValue(json['subtitle']),
+      emoji: _ApiModelParser.toStringValue(json['emoji']),
+      gradient: _ApiModelParser.toStringValue(json['gradient']),
+      couponCode: _ApiModelParser.toStringValue(json['couponCode']),
       imageUrl: _ApiModelParser.toStringValue(json['imageUrl']),
       linkedCategoryId: _ApiModelParser.toInt(json['linkedCategoryId']),
       linkedProductId: _ApiModelParser.toInt(json['linkedProductId']),
@@ -417,6 +1120,10 @@ class CategorySummary {
     required this.id,
     required this.name,
     this.emoji,
+    this.slug,
+    this.type,
+    this.colorBg,
+    this.colorText,
     this.nameEn,
     this.nameTe,
     this.iconUrl,
@@ -430,6 +1137,10 @@ class CategorySummary {
   final int id;
   final String name;
   final String? emoji;
+  final String? slug;
+  final String? type;
+  final String? colorBg;
+  final String? colorText;
   final String? nameEn;
   final String? nameTe;
   final String? iconUrl;
@@ -448,6 +1159,10 @@ class CategorySummary {
           _ApiModelParser.toStringValue(json['nameTe']) ??
           '',
       emoji: _ApiModelParser.toStringValue(json['emoji']),
+      slug: _ApiModelParser.toStringValue(json['slug']),
+      type: _ApiModelParser.toStringValue(json['type']),
+      colorBg: _ApiModelParser.toStringValue(json['colorBg']),
+      colorText: _ApiModelParser.toStringValue(json['colorText']),
       nameEn: _ApiModelParser.toStringValue(json['nameEn']),
       nameTe: _ApiModelParser.toStringValue(json['nameTe']),
       iconUrl: _ApiModelParser.toStringValue(json['iconUrl']),
@@ -696,6 +1411,8 @@ class ProductSummary {
     this.categoryId,
     this.categoryName,
     this.brand,
+    this.tag,
+    this.rating,
     this.isFeatured,
   });
 
@@ -721,6 +1438,8 @@ class ProductSummary {
   final int? categoryId;
   final String? categoryName;
   final String? brand;
+  final String? tag;
+  final double? rating;
   final bool? isFeatured;
 
   factory ProductSummary.fromJson(Map<String, dynamic> json) {
@@ -766,13 +1485,25 @@ class ProductSummary {
           _ApiModelParser.toStringValue(json['image3']),
       categoryId: _ApiModelParser.toInt(json['categoryId']),
       categoryName: _ApiModelParser.toStringValue(json['categoryName']),
-      brand:
-          _ApiModelParser.toStringValue(json['brand']) ??
-          _ApiModelParser.toStringValue(json['tag']),
+      brand: _ApiModelParser.toStringValue(json['brand']),
+      tag: _ApiModelParser.toStringValue(json['tag']),
+      rating: _ApiModelParser.toDouble(json['rating']),
       isFeatured:
           _ApiModelParser.toBool(json['isFeatured']) ??
           _ApiModelParser.toBool(json['featured']),
     );
+  }
+
+  String? get displayTag {
+    final value = tag?.trim();
+    if (value != null && value.isNotEmpty) {
+      return value;
+    }
+    final brandValue = brand?.trim();
+    if (brandValue != null && brandValue.isNotEmpty) {
+      return brandValue;
+    }
+    return null;
   }
 
   String localizedName(AppLanguage language) {

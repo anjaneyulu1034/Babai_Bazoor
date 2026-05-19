@@ -13,11 +13,33 @@ import 'package:babai_bazor_app/features/auth/presentation/screens/login_require
 import 'package:babai_bazor_app/features/home/presentation/screens/category_products_screen.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/cart_screen.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/product_details_screen.dart';
+import 'package:babai_bazor_app/features/home/presentation/screens/service_details_screen.dart';
+import 'package:babai_bazor_app/features/home/presentation/screens/services_screen.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/static_design_screens.dart';
+import 'package:babai_bazor_app/features/onboarding/presentation/screens/post_otp_location_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+
+Color _parseHexColor(String? rawHex, {Color fallback = const Color(0xFFD9EFE5)}) {
+  final value = rawHex?.trim() ?? '';
+  if (value.isEmpty) {
+    return fallback;
+  }
+  var hex = value.replaceAll('#', '');
+  if (hex.length == 6) {
+    hex = 'FF$hex';
+  }
+  if (hex.length != 8) {
+    return fallback;
+  }
+  final parsed = int.tryParse(hex, radix: 16);
+  if (parsed == null) {
+    return fallback;
+  }
+  return Color(parsed);
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.language, this.currentLocation});
@@ -48,11 +70,15 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _catalogError;
   Timer? _searchDebounce;
   Timer? _bannerAutoSlideTimer;
+  Timer? _cartStripTimer;
   List<HomeBannerSummary> _banners = const [];
   int _activeBannerIndex = 0;
   List<CategorySummary> _categories = const [];
   Map<int, HomeSection> _sectionsByCategory = const {};
   List<ProductSummary> _featuredProducts = const [];
+  List<ServiceSummary> _featuredServices = const [];
+  List<PromoCodeSummary> _promoCodes = const [];
+  bool _showAllQuickPicks = false;
   int? _selectedCategoryId;
   int? _selectedSubCategoryId;
   String? _resolvedGuestLocation;
@@ -61,6 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double? _resolvedGuestLongitude;
   bool _isRefreshingCartSummary = false;
   bool _isUpdatingQuickPickCart = false;
+  bool _showCartStrip = false;
   int _cartItemCount = 0;
   double _cartTotal = 0;
   Set<int> _updatingProductIds = <int>{};
@@ -141,10 +168,31 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _searchDebounce?.cancel();
     _bannerAutoSlideTimer?.cancel();
+    _cartStripTimer?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _bannerPageController.dispose();
     super.dispose();
+  }
+
+  void _showCartStripTemporarily() {
+    if (_cartItemCount <= 0 || !mounted) {
+      return;
+    }
+
+    _cartStripTimer?.cancel();
+    setState(() {
+      _showCartStrip = true;
+    });
+
+    _cartStripTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _showCartStrip = false;
+      });
+    });
   }
 
   void _syncBannerAutoSlide() {
@@ -171,26 +219,33 @@ class _HomeScreenState extends State<HomeScreen> {
     final pincode = _effectivePincode;
 
     try {
-      final sectionsResponse = await _homeService.getHomeSections(
+      final dashboardFuture = _homeService.getHome(
+        language: _activeLanguage,
+        pincode: pincode,
+      );
+      final sectionsFuture = _homeService.getHomeSections(
         language: _activeLanguage,
         pincode: pincode,
         latitude: _resolvedGuestLatitude,
         longitude: _resolvedGuestLongitude,
       );
-      final fallbackHome = await _homeService.getHome(
-        language: _activeLanguage,
-        pincode: pincode,
-      );
+      final dashboard = await dashboardFuture;
+      final sectionsResponse = await sectionsFuture;
 
       final sectionsData = sectionsResponse.data;
 
       List<CategorySummary> categories = const [];
       Map<int, HomeSection> sectionsByCategory = const {};
-      List<HomeBannerSummary> banners = const [];
+      List<HomeBannerSummary> banners = dashboard.banners;
       List<ProductSummary> featuredProducts = const [];
+      List<ServiceSummary> featuredServices = dashboard.featuredServices;
+      List<PromoCodeSummary> promoCodes = dashboard.promoCodes;
 
       if (sectionsData != null) {
-        banners = sectionsData.banners;
+        if (banners.isEmpty) {
+          banners = sectionsData.banners;
+        }
+
         categories =
             sectionsData.categoryPills
                 .map(
@@ -218,12 +273,8 @@ class _HomeScreenState extends State<HomeScreen> {
         sectionsByCategory = sectionMap;
       }
 
-      if (banners.isEmpty) {
-        banners = fallbackHome.banners;
-      }
-
       if (categories.isEmpty) {
-        categories = fallbackHome.categories;
+        categories = dashboard.categories;
       }
 
       if (categories.isEmpty) {
@@ -265,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (sectionProducts.isNotEmpty) {
           featuredProducts = sectionProducts;
         } else {
-          featuredProducts = fallbackHome.featuredProducts;
+          featuredProducts = dashboard.featuredProducts;
           if (featuredProducts.isEmpty) {
             final productsResponse = await _homeService.getProducts(
               language: _activeLanguage,
@@ -277,9 +328,27 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
+      if (featuredServices.isEmpty) {
+        final servicesResponse = await _homeService.getServices(
+          language: _activeLanguage,
+        );
+        if (servicesResponse.data.isNotEmpty) {
+          featuredServices = servicesResponse.data;
+        }
+      }
+
+      if (promoCodes.isEmpty) {
+        final promoResponse = await _homeService.getPromoCodes(
+          language: _activeLanguage,
+        );
+        if (promoResponse.data.isNotEmpty) {
+          promoCodes = promoResponse.data;
+        }
+      }
+
       final zone = sectionsData?.deliveryZone;
       final etaText =
-          fallbackHome.etaText ??
+          dashboard.etaText ??
           (zone?.estimatedDeliveryHours != null
               ? '${zone!.estimatedDeliveryHours} hours'
               : '22 minutes');
@@ -287,8 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _apiLocation =
-            sectionsData?.deliveryZone?.areaName ??
-            fallbackHome.currentLocation;
+            sectionsData?.deliveryZone?.areaName ?? dashboard.currentLocation;
         _apiEtaText = etaText;
         _banners = banners;
         if (_activeBannerIndex >= _banners.length) {
@@ -299,7 +367,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _selectedCategoryId = selectedCategoryId;
         if (_searchQuery.isEmpty) {
           _featuredProducts = featuredProducts;
+          _showAllQuickPicks = false;
         }
+        _featuredServices = featuredServices;
+        _promoCodes = promoCodes;
         _isLoadingHome = false;
         _isLoadingCatalog = false;
       });
@@ -427,6 +498,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _cartItemCount = 0;
           _cartTotal = 0;
           _cartQtyByProductId = <int, int>{};
+          _showCartStrip = false;
         });
         return;
       }
@@ -459,6 +531,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _cartItemCount = itemCount;
         _cartTotal = total;
         _cartQtyByProductId = qtyByProduct;
+        if (itemCount <= 0) {
+          _showCartStrip = false;
+        }
       });
     } finally {
       _isRefreshingCartSummary = false;
@@ -473,6 +548,31 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     await _loadCartSummary();
+  }
+
+  Future<void> _openLocationChangeScreen() async {
+    final selectedLocation = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => PostOtpLocationScreen(
+          language: _activeLanguage,
+          openAsChangeLocation: true,
+        ),
+      ),
+    );
+
+    if (!mounted ||
+        selectedLocation == null ||
+        selectedLocation.trim().isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _apiLocation = selectedLocation.trim();
+      _resolvedGuestLocation = selectedLocation.trim();
+      _resolvedGuestPincode = _resolvePincode(selectedLocation);
+    });
+
+    await _loadHomeData();
   }
 
   Future<void> _updateQuickPickCart(ProductSummary item, int quantity) async {
@@ -575,8 +675,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _cartTotal = total;
         _cartQtyByProductId = qtyByProduct;
       });
+      _showCartStripTemporarily();
     } else {
       await _loadCartSummary();
+      _showCartStripTemporarily();
     }
   }
 
@@ -720,6 +822,114 @@ class _HomeScreenState extends State<HomeScreen> {
     return match.group(1) ?? fallback;
   }
 
+  double _homeContentBottomInset(BuildContext context) {
+    const navBarHeight = 72.0;
+    const contentGap = 20.0;
+    const cartStripHeight = 96.0;
+    final safeBottom = MediaQuery.of(context).padding.bottom;
+
+    return navBarHeight +
+        safeBottom +
+        contentGap +
+        (_showCartStrip && _cartItemCount > 0 ? cartStripHeight : 0);
+  }
+
+  List<ProductSummary> get _visibleQuickPicks {
+    if (_showAllQuickPicks || _featuredProducts.length <= 6) {
+      return _featuredProducts;
+    }
+    return _featuredProducts.take(6).toList();
+  }
+
+  List<Color> _bannerGradientColors(HomeBannerSummary banner) {
+    const fallback = [Color(0xFF1DAE5F), Color(0xFF11BA84)];
+    final raw = banner.gradient?.trim() ?? '';
+    if (raw.isEmpty) {
+      return fallback;
+    }
+
+    final matches = RegExp(
+      r'#([0-9A-Fa-f]{6})',
+    ).allMatches(raw).map((match) => '#${match.group(1)!}').toList();
+    if (matches.length >= 2) {
+      return [
+        _parseHexColor(matches[0], fallback: fallback[0]),
+        _parseHexColor(matches[1], fallback: fallback[1]),
+      ];
+    }
+    if (matches.length == 1) {
+      final color = _parseHexColor(matches[0], fallback: fallback[0]);
+      return [color, color.withValues(alpha: 0.85)];
+    }
+    return fallback;
+  }
+
+  Color _colorFromHex(
+    String? rawHex, {
+    Color fallback = const Color(0xFFD9EFE5),
+  }) {
+    return _parseHexColor(rawHex, fallback: fallback);
+  }
+
+  String _formatRupees(double? value) {
+    if (value == null) {
+      return '';
+    }
+    if (value == value.roundToDouble()) {
+      return '₹${value.toStringAsFixed(0)}';
+    }
+    return '₹${value.toStringAsFixed(2)}';
+  }
+
+  String _promoSubtitle(PromoCodeSummary promo) {
+    final type = (promo.discountType ?? '').toUpperCase();
+    if (type == 'FREE_DELIVERY') {
+      final minOrder = promo.minOrderValue;
+      if (minOrder != null && minOrder > 0) {
+        return 'Free delivery above ${_formatRupees(minOrder)}';
+      }
+      return 'Free delivery';
+    }
+
+    if (type == 'PERCENT') {
+      final value = promo.discountValue;
+      if (value != null) {
+        final pct = value == value.roundToDouble()
+            ? value.toStringAsFixed(0)
+            : value.toStringAsFixed(1);
+        return '$pct% OFF';
+      }
+    }
+
+    if (type == 'FLAT') {
+      return '${_formatRupees(promo.discountValue)} OFF';
+    }
+
+    return promo.applicableOn ?? 'Offer available';
+  }
+
+  String _promoTag(PromoCodeSummary promo) {
+    final on = promo.applicableOn?.trim();
+    if (on == null || on.isEmpty) {
+      return 'ALL';
+    }
+    return on;
+  }
+
+  String _serviceDiscount(ServiceSummary service) {
+    final discount = service.discount;
+    if (discount != null && discount > 0) {
+      return '$discount% OFF';
+    }
+    final mrp = service.mrp;
+    final price = service.price;
+    if (mrp == null || price == null || mrp <= 0 || price >= mrp) {
+      return 'Best Price';
+    }
+    final pct = ((mrp - price) / mrp) * 100;
+    return '${pct.round()}% OFF';
+  }
+
   @override
   Widget build(BuildContext context) {
     final locationText = (_apiLocation != null && _apiLocation!.isNotEmpty)
@@ -800,25 +1010,32 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                           const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  displayLocation,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 29,
-                                    fontWeight: FontWeight.w800,
+                          InkWell(
+                            onTap: _openLocationChangeScreen,
+                            borderRadius: BorderRadius.circular(10),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      displayLocation,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 29,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const Icon(
+                                    Icons.keyboard_arrow_down,
+                                    color: Color(0xFFFFC53A),
+                                  ),
+                                ],
                               ),
-                              const Icon(
-                                Icons.keyboard_arrow_down,
-                                color: Color(0xFFFFC53A),
-                              ),
-                            ],
+                            ),
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -890,7 +1107,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
+                      padding: EdgeInsets.fromLTRB(
+                        12,
+                        14,
+                        12,
+                        _homeContentBottomInset(context),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -898,80 +1120,87 @@ class _HomeScreenState extends State<HomeScreen> {
                             icon: '🔥',
                             title: "Today's Offers",
                             subtitle: 'Tap to copy code',
-                            actionLabel: 'See all →',
-                            onActionTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StaticOffersScreen(
-                                    language: _activeLanguage,
-                                  ),
-                                ),
-                              );
-                            },
                           ),
                           const SizedBox(height: 10),
                           SizedBox(
                             height: 136,
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: 3,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(width: 10),
-                              itemBuilder: (context, index) {
-                                const offerTitles = [
-                                  '50% OFF',
-                                  '₹200 OFF',
-                                  'FREE DELIVERY',
-                                ];
-                                const offerSubs = [
-                                  'First grocery order',
-                                  'Services above ₹999',
-                                  'Orders above ₹299',
-                                ];
-                                const offerCodes = [
-                                  'BABAI1',
-                                  'HOME200',
-                                  'FREEDEL',
-                                ];
-                                const colors = [
-                                  Color(0xFFD9EFE5),
-                                  Color(0xFFDCE8FC),
-                                  Color(0xFFFBE7DC),
-                                ];
-                                return _OfferCard(
-                                  title: offerTitles[index],
-                                  subtitle: offerSubs[index],
-                                  code: offerCodes[index],
-                                  background: colors[index],
-                                  onTap: () async {
-                                    await Clipboard.setData(
-                                      ClipboardData(text: offerCodes[index]),
-                                    );
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Copied ${offerCodes[index]}',
-                                        ),
+                            child: _promoCodes.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'Offers will appear soon',
+                                      style: TextStyle(
+                                        color: Color(0xFF6D6D6D),
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                    );
-                                  },
-                                );
-                              },
-                            ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _promoCodes.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(width: 10),
+                                    itemBuilder: (context, index) {
+                                      final promo = _promoCodes[index];
+                                      return _OfferCard(
+                                        title: _promoSubtitle(promo),
+                                        subtitle: promo.localizedTitle(
+                                          _activeLanguage,
+                                        ),
+                                        code: promo.code,
+                                        background: _colorFromHex(promo.color),
+                                        onTap: () async {
+                                          await Clipboard.setData(
+                                            ClipboardData(text: promo.code),
+                                          );
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Copied ${promo.code}',
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
                           ),
                           const SizedBox(height: 16),
-                          Container(
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(20),
-                              onTap: _banners.isEmpty
-                                  ? null
-                                  : () => _onBannerTap(
-                                      _banners[_activeBannerIndex],
+                          if (_banners.isEmpty)
+                            const _DashboardBannerCard()
+                          else
+                            SizedBox(
+                              height: 178,
+                              child: PageView.builder(
+                                controller: _bannerPageController,
+                                onPageChanged: (index) {
+                                  setState(() => _activeBannerIndex = index);
+                                },
+                                itemCount: _banners.length,
+                                itemBuilder: (context, index) {
+                                  final banner = _banners[index];
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 2,
                                     ),
-                              child: _MonsoonPromoCard(banners: _banners),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(20),
+                                      onTap: () => _onBannerTap(banner),
+                                      child: _DashboardBannerCard(
+                                        banner: banner,
+                                        gradientColors: _bannerGradientColors(
+                                          banner,
+                                        ),
+                                        activeIndex: _activeBannerIndex,
+                                        totalCount: _banners.length,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
                           const SizedBox(height: 18),
                           const _SectionHeading(
                             icon: '🏪',
@@ -985,10 +1214,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                 _openCategoryProducts(item),
                           ),
                           const SizedBox(height: 18),
-                          const _SectionHeading(
+                          _SectionHeading(
                             icon: '⚡',
                             title: 'Quick Picks',
                             subtitle: 'Most ordered today',
+                            actionLabel: _featuredProducts.length > 6
+                                ? (_showAllQuickPicks
+                                      ? 'Show less'
+                                      : 'See all →')
+                                : null,
+                            onActionTap: _featuredProducts.length > 6
+                                ? () {
+                                    setState(() {
+                                      _showAllQuickPicks = !_showAllQuickPicks;
+                                    });
+                                  }
+                                : null,
                           ),
                           const SizedBox(height: 10),
                           SizedBox(
@@ -1005,11 +1246,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   )
                                 : ListView.separated(
                                     scrollDirection: Axis.horizontal,
-                                    itemCount: _featuredProducts.length,
+                                    itemCount: _visibleQuickPicks.length,
                                     separatorBuilder: (_, __) =>
                                         const SizedBox(width: 10),
                                     itemBuilder: (context, index) {
-                                      final item = _featuredProducts[index];
+                                      final item = _visibleQuickPicks[index];
                                       return _QuickPickCard(
                                         item: item,
                                         language: _activeLanguage,
@@ -1052,78 +1293,110 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: LinearProgressIndicator(minHeight: 2),
                             ),
                           const SizedBox(height: 18),
-                          _SectionHeading(
-                            icon: '🔧',
-                            title: 'Popular Services',
-                            subtitle: 'Trusted professionals near you',
-                            actionLabel: 'See all →',
-                            onActionTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StaticServicesScreen(
-                                    language: _activeLanguage,
+                          if (_featuredServices.isNotEmpty) ...[
+                            _SectionHeading(
+                              icon: '🔧',
+                              title: 'Popular Services',
+                              subtitle: 'Trusted professionals near you',
+                              actionLabel: 'See all →',
+                              onActionTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => ServicesScreen(
+                                      language: _activeLanguage,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                            ...List.generate(_featuredServices.take(2).length, (
+                              index,
+                            ) {
+                              final service = _featuredServices
+                                  .take(2)
+                                  .toList()[index];
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  bottom:
+                                      index ==
+                                          _featuredServices.take(2).length - 1
+                                      ? 0
+                                      : 10,
+                                ),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => ServiceDetailsScreen(
+                                          language: _activeLanguage,
+                                          service: service,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: _ServiceTile(
+                                    emoji: service.emoji,
+                                    title: service.localizedName(
+                                      _activeLanguage,
+                                    ),
+                                    price: _formatRupees(service.price),
+                                    strikePrice: _formatRupees(service.mrp),
+                                    discount: _serviceDiscount(service),
+                                    rating: (service.rating ?? 0)
+                                        .toStringAsFixed(1),
+                                    eta:
+                                        service.durationLabel
+                                                ?.trim()
+                                                .isNotEmpty ==
+                                            true
+                                        ? service.durationLabel!.trim()
+                                        : '30-60 min',
                                   ),
                                 ),
                               );
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          const _ServiceTile(
-                            title: 'Full Home Deep Clean',
-                            price: '₹999',
-                            strikePrice: '₹1399',
-                            discount: '29% OFF',
-                            rating: '4.8 (2341)',
-                            eta: '4-5 hrs',
-                          ),
-                          const SizedBox(height: 10),
-                          const _ServiceTile(
-                            title: 'Bathroom Deep Clean',
-                            price: '₹299',
-                            strikePrice: '₹449',
-                            discount: '33% OFF',
-                            rating: '4.7 (1892)',
-                            eta: '1-1.5 hrs',
-                          ),
-                          const SizedBox(height: 18),
+                            }),
+                            const SizedBox(height: 18),
+                          ],
                           _SectionHeading(
                             icon: '🎟️',
                             title: 'Coupons for You',
-                            actionLabel: 'See all →',
-                            onActionTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StaticOffersScreen(
-                                    language: _activeLanguage,
-                                  ),
-                                ),
-                              );
-                            },
                           ),
                           const SizedBox(height: 10),
-                          const Row(
-                            children: [
-                              Expanded(
-                                child: _CouponCard(
-                                  accent: Color(0xFFFFE1D5),
-                                  title: 'Welcome Offer',
-                                  subtitle: '50% off up to ₹150',
-                                  code: 'BABAi1',
-                                  tag: 'ALL',
-                                ),
+                          if (_promoCodes.isEmpty)
+                            const Text(
+                              'Coupons will appear soon',
+                              style: TextStyle(
+                                color: Color(0xFF6D6D6D),
+                                fontWeight: FontWeight.w600,
                               ),
-                              SizedBox(width: 10),
-                              Expanded(
-                                child: _CouponCard(
-                                  accent: Color(0xFFDDF8E8),
-                                  title: 'Fresh Farms',
-                                  subtitle: '40% off on veggies',
-                                  code: 'FARM40',
-                                  tag: 'GROCERY',
-                                ),
-                              ),
-                            ],
-                          ),
+                            )
+                          else
+                            Row(
+                              children: [
+                                for (final promo in _promoCodes.take(2))
+                                  Expanded(
+                                    child: Padding(
+                                      padding: EdgeInsets.only(
+                                        right:
+                                            promo == _promoCodes.take(2).first
+                                            ? 10
+                                            : 0,
+                                      ),
+                                      child: _CouponCard(
+                                        accent: _colorFromHex(promo.color),
+                                        title: promo.localizedTitle(
+                                          _activeLanguage,
+                                        ),
+                                        subtitle: _promoSubtitle(promo),
+                                        code: promo.code,
+                                        tag: _promoTag(promo),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                         ],
                       ),
                     ),
@@ -1139,7 +1412,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_cartItemCount > 0)
+            if (_showCartStrip && _cartItemCount > 0)
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
                 child: InkWell(
@@ -1430,22 +1703,31 @@ class _OfferCard extends StatelessWidget {
   }
 }
 
-class _MonsoonPromoCard extends StatelessWidget {
-  const _MonsoonPromoCard({required this.banners});
+class _DashboardBannerCard extends StatelessWidget {
+  const _DashboardBannerCard({
+    this.banner,
+    this.gradientColors = const [Color(0xFF1DAE5F), Color(0xFF11BA84)],
+    this.activeIndex = 0,
+    this.totalCount = 0,
+  });
 
-  final List<HomeBannerSummary> banners;
+  final HomeBannerSummary? banner;
+  final List<Color> gradientColors;
+  final int activeIndex;
+  final int totalCount;
 
   @override
   Widget build(BuildContext context) {
-    final banner = banners.isEmpty ? null : banners.first;
+    final coupon = banner?.couponCode?.trim();
+    final emoji = banner?.emoji?.trim();
     return Container(
       height: 178,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1DAE5F), Color(0xFF11BA84)],
+          colors: gradientColors,
         ),
       ),
       child: Stack(
@@ -1465,53 +1747,23 @@ class _MonsoonPromoCard extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xAA1DAE5F), Color(0xBB0A8F6B)],
+                  colors: [
+                    gradientColors.first.withValues(alpha: 0.92),
+                    gradientColors.last.withValues(alpha: 0.88),
+                  ],
                 ),
               ),
             ),
           ),
-          Positioned(
-            top: 8,
-            right: 10,
-            child: SizedBox(
-              width: 100,
-              height: 68,
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: 2,
-                    top: 4,
-                    child: Container(
-                      width: 62,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0x22C7FFE5),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 6,
-                    top: 14,
-                    child: Container(
-                      width: 46,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: const Color(0x18C7FFE5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ),
-                  const Positioned(right: 26, bottom: 2, child: _RainLine()),
-                  const Positioned(right: 14, bottom: 6, child: _RainLine()),
-                  const Positioned(right: 2, bottom: 2, child: _RainLine()),
-                ],
-              ),
+          if (emoji != null && emoji.isNotEmpty)
+            Positioned(
+              top: 12,
+              right: 16,
+              child: Text(emoji, style: const TextStyle(fontSize: 52)),
             ),
-          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
             child: Column(
@@ -1527,20 +1779,20 @@ class _MonsoonPromoCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  banner?.title ?? 'Monsoon Fresh Veggies',
-                  maxLines: 1,
+                  banner?.title ?? 'Fresh deals for you',
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: 38,
+                    fontSize: 30,
                     height: 1.1,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  banner?.subtitle ?? 'Straight from farms · Up to 40% off',
-                  maxLines: 1,
+                  banner?.subtitle ?? 'Check back soon for new offers',
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFFE7FFF2),
@@ -1551,34 +1803,35 @@ class _MonsoonPromoCard extends StatelessWidget {
                 const Spacer(),
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF7DD1A3),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'USE: FARM40',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
+                    if (coupon != null && coupon.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.28),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'USE: $coupon',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
-                    ),
                     const Spacer(),
-                    const Row(
-                      children: [
-                        _PagerDot(active: true),
-                        SizedBox(width: 6),
-                        _PagerDot(),
-                        SizedBox(width: 6),
-                        _PagerDot(),
-                      ],
-                    ),
+                    if (totalCount > 1)
+                      Row(
+                        children: List.generate(totalCount, (index) {
+                          return Padding(
+                            padding: EdgeInsets.only(left: index == 0 ? 0 : 6),
+                            child: _PagerDot(active: index == activeIndex),
+                          );
+                        }),
+                      ),
                   ],
                 ),
               ],
@@ -1603,25 +1856,6 @@ class _PagerDot extends StatelessWidget {
       decoration: BoxDecoration(
         color: active ? Colors.white : const Color(0x88FFFFFF),
         borderRadius: BorderRadius.circular(8),
-      ),
-    );
-  }
-}
-
-class _RainLine extends StatelessWidget {
-  const _RainLine();
-
-  @override
-  Widget build(BuildContext context) {
-    return Transform.rotate(
-      angle: -0.6,
-      child: Container(
-        width: 6,
-        height: 20,
-        decoration: BoxDecoration(
-          color: const Color(0x2266C7B0),
-          borderRadius: BorderRadius.circular(12),
-        ),
       ),
     );
   }
@@ -1654,16 +1888,23 @@ class _CategoryGridModern extends StatelessWidget {
     }
 
     final items = categories.length > 8 ? categories.sublist(0, 8) : categories;
-    final tileColors = [
-      const Color(0xFFDDF0E8),
-      const Color(0xFFF9E8E1),
-      const Color(0xFFE7ECFA),
-      const Color(0xFFFAF0D8),
-      const Color(0xFFF8E4F1),
-      const Color(0xFFE4F2FA),
-      const Color(0xFFE8F5EA),
-      const Color(0xFFFBEFB7),
-    ];
+    Color tileColorFor(CategorySummary item, int index) {
+      final fromApi = item.colorBg?.trim();
+      if (fromApi != null && fromApi.isNotEmpty) {
+        return _parseHexColor(fromApi);
+      }
+      const defaults = [
+        Color(0xFFDDF0E8),
+        Color(0xFFF9E8E1),
+        Color(0xFFE7ECFA),
+        Color(0xFFFAF0D8),
+        Color(0xFFF8E4F1),
+        Color(0xFFE4F2FA),
+        Color(0xFFE8F5EA),
+        Color(0xFFFBEFB7),
+      ];
+      return defaults[index % defaults.length];
+    }
 
     return GridView.builder(
       itemCount: items.length,
@@ -1683,7 +1924,7 @@ class _CategoryGridModern extends StatelessWidget {
           child: Ink(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: tileColors[index % tileColors.length],
+              color: tileColorFor(item, index),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: const Color(0xFFD7DCE8)),
             ),
@@ -1784,7 +2025,8 @@ class _QuickPickCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(9),
               ),
               child: Text(
-                item.isFeatured == true ? 'ORGANIC' : 'FRESH',
+                (item.displayTag ?? (item.isFeatured == true ? 'ORGANIC' : 'FRESH'))
+                    .toUpperCase(),
                 style: const TextStyle(
                   color: Color(0xFF1D9855),
                   fontWeight: FontWeight.w700,
@@ -1932,6 +2174,7 @@ class _QuickPickCard extends StatelessWidget {
 
 class _ServiceTile extends StatelessWidget {
   const _ServiceTile({
+    this.emoji,
     required this.title,
     required this.price,
     required this.strikePrice,
@@ -1940,6 +2183,7 @@ class _ServiceTile extends StatelessWidget {
     required this.eta,
   });
 
+  final String? emoji;
   final String title;
   final String price;
   final String strikePrice;
@@ -1966,7 +2210,10 @@ class _ServiceTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             alignment: Alignment.center,
-            child: const Text('🏠', style: TextStyle(fontSize: 30)),
+            child: Text(
+              (emoji ?? '').trim().isNotEmpty ? emoji!.trim() : '🏠',
+              style: const TextStyle(fontSize: 30),
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(

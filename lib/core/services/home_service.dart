@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:babai_bazor_app/core/constants/api_constants.dart';
@@ -45,6 +46,331 @@ class HomeService {
       return const HomeApiResponse();
     } catch (_) {
       return const HomeApiResponse();
+    }
+  }
+
+  Future<OffersListApiResponse> getOffers({
+    required AppLanguage language,
+  }) async {
+    try {
+      final response = await http
+          .get(
+            OfferApiEndpoints.list(languageCode: language.code),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      return OffersListApiResponse.fromHttp(
+        response.statusCode,
+        response.body,
+      );
+    } on TimeoutException {
+      return const OffersListApiResponse(
+        isSuccess: false,
+        message: 'Request timed out. Try again.',
+      );
+    } on SocketException {
+      return const OffersListApiResponse(
+        isSuccess: false,
+        message: 'No internet connection.',
+      );
+    } catch (_) {
+      return const OffersListApiResponse(
+        isSuccess: false,
+        message: 'Unable to load offers.',
+      );
+    }
+  }
+
+  Future<PromoCodesListApiResponse> getPromoCodes({
+    required AppLanguage language,
+    String? applicableOn,
+  }) async {
+    try {
+      final response = await http
+          .get(
+            PromoApiEndpoints.list(
+              applicableOn: applicableOn,
+              languageCode: language.code,
+            ),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      return PromoCodesListApiResponse.fromHttp(
+        response.statusCode,
+        response.body,
+      );
+    } on TimeoutException {
+      return const PromoCodesListApiResponse(
+        isSuccess: false,
+        message: 'Request timed out. Try again.',
+      );
+    } on SocketException {
+      return const PromoCodesListApiResponse(
+        isSuccess: false,
+        message: 'No internet connection.',
+      );
+    } catch (_) {
+      return const PromoCodesListApiResponse(
+        isSuccess: false,
+        message: 'Unable to load promo codes.',
+      );
+    }
+  }
+
+  Future<ServicesListApiResponse> getServices({
+    required AppLanguage language,
+    int? pageNumber,
+    int? pageSize,
+  }) async {
+    try {
+      final response = await http
+          .get(
+            ServicesApiEndpoints.list(
+              pageNumber: pageNumber,
+              pageSize: pageSize,
+              languageCode: language.code,
+            ),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      return ServicesListApiResponse.fromHttp(
+        response.statusCode,
+        response.body,
+      );
+    } on TimeoutException {
+      return const ServicesListApiResponse(
+        isSuccess: false,
+        message: 'Request timed out. Try again.',
+      );
+    } on SocketException {
+      return const ServicesListApiResponse(
+        isSuccess: false,
+        message: 'No internet connection.',
+      );
+    } catch (_) {
+      return const ServicesListApiResponse(
+        isSuccess: false,
+        message: 'Unable to load services.',
+      );
+    }
+  }
+
+  Future<ServiceSummary?> getServiceDetails({
+    required AppLanguage language,
+    required int serviceId,
+  }) async {
+    try {
+      final response = await http
+          .get(
+            ServicesApiEndpoints.details(
+              serviceId,
+              languageCode: language.code,
+            ),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+
+      final payload = jsonDecode(response.body);
+      if (payload is Map<String, dynamic>) {
+        final data = payload['data'];
+        if (data is Map<String, dynamic>) {
+          return ServiceSummary.fromJson(data);
+        }
+        return ServiceSummary.fromJson(payload);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<ServiceSlotsApiResponse> getServiceSlots({
+    required AppLanguage language,
+    required int serviceId,
+    required String slotDate,
+  }) async {
+    try {
+      final byServiceResponse = await http
+          .get(
+            ServicesApiEndpoints.slotsByService(
+              serviceId,
+              slotDate: slotDate,
+              languageCode: language.code,
+            ),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      final parsedByService = ServiceSlotsApiResponse.fromHttp(
+        byServiceResponse.statusCode,
+        byServiceResponse.body,
+      );
+      if (parsedByService.isSuccess && parsedByService.data.isNotEmpty) {
+        return parsedByService;
+      }
+
+      final genericResponse = await http
+          .get(
+            ServicesApiEndpoints.slots(
+              serviceId: serviceId,
+              slotDate: slotDate,
+              languageCode: language.code,
+            ),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      return ServiceSlotsApiResponse.fromHttp(
+        genericResponse.statusCode,
+        genericResponse.body,
+      );
+    } on TimeoutException {
+      return const ServiceSlotsApiResponse(
+        isSuccess: false,
+        message: 'Request timed out. Try again.',
+      );
+    } on SocketException {
+      return const ServiceSlotsApiResponse(
+        isSuccess: false,
+        message: 'No internet connection.',
+      );
+    } catch (_) {
+      return const ServiceSlotsApiResponse(
+        isSuccess: false,
+        message: 'Unable to load slots.',
+      );
+    }
+  }
+
+  Future<ServiceProfessionalsApiResponse> getServiceProfessionals({
+    required AppLanguage language,
+    required int serviceId,
+  }) async {
+    try {
+      final response = await http
+          .get(
+            ServicesApiEndpoints.professionals(
+              serviceId,
+              languageCode: language.code,
+            ),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      return ServiceProfessionalsApiResponse.fromHttp(
+        response.statusCode,
+        response.body,
+      );
+    } on TimeoutException {
+      return const ServiceProfessionalsApiResponse(
+        isSuccess: false,
+        message: 'Request timed out. Try again.',
+      );
+    } on SocketException {
+      return const ServiceProfessionalsApiResponse(
+        isSuccess: false,
+        message: 'No internet connection.',
+      );
+    } catch (_) {
+      return const ServiceProfessionalsApiResponse(
+        isSuccess: false,
+        message: 'Unable to load service professionals.',
+      );
+    }
+  }
+
+  Future<ServiceBookingsListApiResponse> getServiceBookings({
+    required AppLanguage language,
+    String? status,
+    int? pageNumber,
+  }) async {
+    try {
+      final response = await http
+          .get(
+            ServicesApiEndpoints.bookingsList(
+              status: status,
+              pageNumber: pageNumber,
+              languageCode: language.code,
+            ),
+            headers: await _headers(language),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      return ServiceBookingsListApiResponse.fromHttp(
+        response.statusCode,
+        response.body,
+      );
+    } on TimeoutException {
+      return const ServiceBookingsListApiResponse(
+        isSuccess: false,
+        message: 'Request timed out. Try again.',
+      );
+    } on SocketException {
+      return const ServiceBookingsListApiResponse(
+        isSuccess: false,
+        message: 'No internet connection.',
+      );
+    } catch (_) {
+      return const ServiceBookingsListApiResponse(
+        isSuccess: false,
+        message: 'Unable to load bookings.',
+      );
+    }
+  }
+
+  Future<ServiceBookingApiResponse> bookService({
+    required AppLanguage language,
+    required int serviceId,
+    required int addressId,
+    required String slotDate,
+    required String slotTime,
+    required int slotId,
+    required int servicePersonId,
+    required String paymentMethod,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            ServicesApiEndpoints.createBooking(),
+            headers: await _headers(language),
+            body: jsonEncode({
+              'serviceId': serviceId,
+              'addressId': addressId,
+              'slotDate': slotDate,
+              'slotTime': slotTime,
+              'slotId': slotId,
+              'servicePersonId': servicePersonId,
+              'paymentMethod': paymentMethod,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      return ServiceBookingApiResponse.fromHttp(
+        response.statusCode,
+        response.body,
+      );
+    } on TimeoutException {
+      return const ServiceBookingApiResponse(
+        isSuccess: false,
+        message: 'Request timed out. Try again.',
+      );
+    } on SocketException {
+      return const ServiceBookingApiResponse(
+        isSuccess: false,
+        message: 'No internet connection.',
+      );
+    } catch (_) {
+      return const ServiceBookingApiResponse(
+        isSuccess: false,
+        message: 'Unable to create booking.',
+      );
     }
   }
 
