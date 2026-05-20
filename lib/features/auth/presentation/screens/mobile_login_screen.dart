@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:babai_bazor_app/core/constants/api_constants.dart';
+import 'package:babai_bazor_app/core/constants/app_assets.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/core/models/api_models.dart';
 import 'package:babai_bazor_app/features/auth/presentation/screens/otp_verification_screen.dart';
@@ -230,31 +231,20 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.waving_hand_rounded,
-                      color: Color(0xFFFFC107),
-                      size: 40,
+                    Image.asset(
+                      AppAssets.logo,
+                      width: 200,
+                      height: 88,
+                      fit: BoxFit.contain,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     Text(
                       t(_screenLanguage, 'login_welcome_to'),
                       style: const TextStyle(
                         color: Color(0xFFF8EFE8),
-                        fontSize: 30,
+                        fontSize: 22,
                         fontWeight: FontWeight.w700,
-                        fontFamily: 'serif',
                         height: 1.08,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Babai Bazaar',
-                      style: TextStyle(
-                        color: Color(0xFFFFBE0A),
-                        fontSize: 44,
-                        fontWeight: FontWeight.w800,
-                        fontFamily: 'serif',
-                        height: 1.05,
                       ),
                     ),
                     const SizedBox(height: 18),
