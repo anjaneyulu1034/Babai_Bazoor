@@ -22,6 +22,18 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
+const double _kHomeSectionTitleSize = 16;
+const double _kHomeSectionSubtitleSize = 12;
+const double _kHomeBodyTextSize = 13;
+const double _kHomeCaptionTextSize = 11;
+const double _kHomePriceTextSize = 14;
+const double _kHomeCategoryIconSize = 22;
+const double _kHomeCategoryTileHeight = 82;
+const double _kHomeCategoryTileWidth = 76;
+const double _kHomeOffersRowHeight = 100;
+const double _kHomeOfferCardWidth = 116;
+const double _kHomeServiceGridTileHeight = 104;
+
 Color _parseHexColor(String? rawHex, {Color fallback = const Color(0xFFD9EFE5)}) {
   final value = rawHex?.trim() ?? '';
   if (value.isEmpty) {
@@ -916,14 +928,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return promo.applicableOn ?? 'Offer available';
   }
 
-  String _promoTag(PromoCodeSummary promo) {
-    final on = promo.applicableOn?.trim();
-    if (on == null || on.isEmpty) {
-      return 'ALL';
-    }
-    return on;
-  }
-
   String _serviceDiscount(ServiceSummary service) {
     final discount = service.discount;
     if (discount != null && discount > 0) {
@@ -1165,9 +1169,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             title: "Today's Offers",
                             subtitle: 'Tap to copy code',
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
                           SizedBox(
-                            height: 136,
+                            height: _kHomeOffersRowHeight,
                             child: _promoCodes.isEmpty
                                 ? const Center(
                                     child: Text(
@@ -1270,7 +1274,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             title: 'Shop by Category',
                           ),
                           const SizedBox(height: 10),
-                          _CategoryGridModern(
+                          _CategoryScrollRow(
                             categories: _categories,
                             iconResolver: _iconForCategory,
                             onCategoryTap: (item) =>
@@ -1296,7 +1300,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 10),
                           SizedBox(
-                            height: 190,
+                            height: 176,
                             child: _featuredProducts.isEmpty
                                 ? Center(
                                     child: Text(
@@ -1373,21 +1377,22 @@ class _HomeScreenState extends State<HomeScreen> {
                               },
                             ),
                             const SizedBox(height: 10),
-                            ...List.generate(_featuredServices.take(2).length, (
-                              index,
-                            ) {
-                              final service = _featuredServices
-                                  .take(2)
-                                  .toList()[index];
-                              return Padding(
-                                padding: EdgeInsets.only(
-                                  bottom:
-                                      index ==
-                                          _featuredServices.take(2).length - 1
-                                      ? 0
-                                      : 10,
-                                ),
-                                child: InkWell(
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _featuredServices.length > 4
+                                  ? 4
+                                  : _featuredServices.length,
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 10,
+                                mainAxisExtent: _kHomeServiceGridTileHeight,
+                              ),
+                              itemBuilder: (context, index) {
+                                final service = _featuredServices[index];
+                                return InkWell(
                                   borderRadius: BorderRadius.circular(14),
                                   onTap: () {
                                     Navigator.of(context).push(
@@ -1417,49 +1422,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ? service.durationLabel!.trim()
                                         : '30-60 min',
                                   ),
-                                ),
-                              );
-                            }),
+                                );
+                              },
+                            ),
                             const SizedBox(height: 18),
                           ],
-                          _SectionHeading(
-                            icon: '🎟️',
-                            title: 'Coupons for You',
-                          ),
-                          const SizedBox(height: 10),
-                          if (_promoCodes.isEmpty)
-                            const Text(
-                              'Coupons will appear soon',
-                              style: TextStyle(
-                                color: Color(0xFF6D6D6D),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            )
-                          else
-                            Row(
-                              children: [
-                                for (final promo in _promoCodes.take(2))
-                                  Expanded(
-                                    child: Padding(
-                                      padding: EdgeInsets.only(
-                                        right:
-                                            promo == _promoCodes.take(2).first
-                                            ? 10
-                                            : 0,
-                                      ),
-                                      child: _CouponCard(
-                                        accent: _colorFromHex(promo.color),
-                                        title: promo.localizedTitle(
-                                          _activeLanguage,
-                                        ),
-                                        subtitle: _promoSubtitle(promo),
-                                        code: promo.code,
-                                        tag: _promoTag(promo),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
                         ],
                       ),
                     ),
@@ -1498,7 +1465,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w600,
-                                  fontSize: 13,
+                                  fontSize: _kHomeCaptionTextSize,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -1507,7 +1474,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w800,
-                                  fontSize: 28,
+                                  fontSize: _kHomeBodyTextSize,
                                   height: 1,
                                 ),
                               ),
@@ -1519,7 +1486,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
-                            fontSize: 36,
+                            fontSize: _kHomePriceTextSize,
                             height: 1,
                           ),
                         ),
@@ -1627,7 +1594,7 @@ class _SectionHeading extends StatelessWidget {
               title,
               style: const TextStyle(
                 color: Color(0xFF1A1E2E),
-                fontSize: 32,
+                fontSize: _kHomeSectionTitleSize,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -1640,6 +1607,7 @@ class _SectionHeading extends StatelessWidget {
                   style: const TextStyle(
                     color: Color(0xFFF0531C),
                     fontWeight: FontWeight.w700,
+                    fontSize: _kHomeBodyTextSize,
                   ),
                 ),
               ),
@@ -1652,7 +1620,7 @@ class _SectionHeading extends StatelessWidget {
               subtitle!,
               style: const TextStyle(
                 color: Color(0xFF8A90A4),
-                fontSize: 14,
+                fontSize: _kHomeSectionSubtitleSize,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1681,62 +1649,81 @@ class _OfferCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Ink(
-        width: 148,
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFD5D9E7)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('🛒', style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF0B6E4B),
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-                height: 1.15,
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        height: _kHomeOffersRowHeight,
+        width: _kHomeOfferCardWidth,
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFD5D9E7)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '🛒',
+                style: TextStyle(fontSize: _kHomeCaptionTextSize),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF4D556D),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.15,
-              ),
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                code,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF1B8C57),
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11,
+              const SizedBox(height: 2),
+              Expanded(
+                child: ClipRect(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF0B6E4B),
+                            fontWeight: FontWeight.w800,
+                            fontSize: _kHomeBodyTextSize,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Flexible(
+                        child: Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF4D556D),
+                            fontSize: _kHomeSectionSubtitleSize,
+                            fontWeight: FontWeight.w500,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  code,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF1B8C57),
+                    fontWeight: FontWeight.w800,
+                    fontSize: _kHomeCaptionTextSize,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1798,7 +1785,7 @@ class _DashboardBannerCard extends StatelessWidget {
             Positioned(
               top: 12,
               right: 16,
-              child: Text(emoji, style: const TextStyle(fontSize: 52)),
+              child: Text(emoji, style: const TextStyle(fontSize: 36)),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
@@ -1810,7 +1797,7 @@ class _DashboardBannerCard extends StatelessWidget {
                   style: TextStyle(
                     color: Color(0xFFD4FFE8),
                     fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                    fontSize: _kHomeCaptionTextSize,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1821,7 +1808,7 @@ class _DashboardBannerCard extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: 30,
+                    fontSize: _kHomeSectionTitleSize,
                     height: 1.1,
                   ),
                 ),
@@ -1833,7 +1820,7 @@ class _DashboardBannerCard extends StatelessWidget {
                   style: const TextStyle(
                     color: Color(0xFFE7FFF2),
                     fontWeight: FontWeight.w600,
-                    fontSize: 15,
+                    fontSize: _kHomeBodyTextSize,
                   ),
                 ),
                 const Spacer(),
@@ -1887,8 +1874,8 @@ class _PagerDot extends StatelessWidget {
   }
 }
 
-class _CategoryGridModern extends StatelessWidget {
-  const _CategoryGridModern({
+class _CategoryScrollRow extends StatelessWidget {
+  const _CategoryScrollRow({
     required this.categories,
     required this.iconResolver,
     required this.onCategoryTap,
@@ -1898,12 +1885,30 @@ class _CategoryGridModern extends StatelessWidget {
   final IconData Function(String, {int? categoryId}) iconResolver;
   final ValueChanged<CategorySummary> onCategoryTap;
 
+  Color _tileColorFor(CategorySummary item, int index) {
+    final fromApi = item.colorBg?.trim();
+    if (fromApi != null && fromApi.isNotEmpty) {
+      return _parseHexColor(fromApi);
+    }
+    const defaults = [
+      Color(0xFFDDF0E8),
+      Color(0xFFF9E8E1),
+      Color(0xFFE7ECFA),
+      Color(0xFFFAF0D8),
+      Color(0xFFF8E4F1),
+      Color(0xFFE4F2FA),
+      Color(0xFFE8F5EA),
+      Color(0xFFFBEFB7),
+    ];
+    return defaults[index % defaults.length];
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeLanguage = AppLanguageScope.watch(context);
     if (categories.isEmpty) {
       return const SizedBox(
-        height: 86,
+        height: _kHomeCategoryTileHeight,
         child: Center(
           child: Text(
             'No categories available',
@@ -1913,98 +1918,76 @@ class _CategoryGridModern extends StatelessWidget {
       );
     }
 
-    final items = categories.length > 8 ? categories.sublist(0, 8) : categories;
-    Color tileColorFor(CategorySummary item, int index) {
-      final fromApi = item.colorBg?.trim();
-      if (fromApi != null && fromApi.isNotEmpty) {
-        return _parseHexColor(fromApi);
-      }
-      const defaults = [
-        Color(0xFFDDF0E8),
-        Color(0xFFF9E8E1),
-        Color(0xFFE7ECFA),
-        Color(0xFFFAF0D8),
-        Color(0xFFF8E4F1),
-        Color(0xFFE4F2FA),
-        Color(0xFFE8F5EA),
-        Color(0xFFFBEFB7),
-      ];
-      return defaults[index % defaults.length];
-    }
-
-    return GridView.builder(
-      itemCount: items.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 0.88,
-      ),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () => onCategoryTap(item),
-          child: Ink(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: tileColorFor(item, index),
+    return SizedBox(
+      height: _kHomeCategoryTileHeight,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, index) {
+          final item = categories[index];
+          return SizedBox(
+            width: _kHomeCategoryTileWidth,
+            child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD7DCE8)),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if ((item.emoji ?? '').trim().isNotEmpty)
-                  Expanded(
-                    child: Center(
-                      child: Text(
+              onTap: () => onCategoryTap(item),
+              child: Ink(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _tileColorFor(item, index),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFD7DCE8)),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if ((item.emoji ?? '').trim().isNotEmpty)
+                      Text(
                         item.emoji!,
-                        style: const TextStyle(fontSize: 28),
-                      ),
-                    ),
-                  )
-                else if ((item.iconUrl ?? '').trim().isNotEmpty)
-                  Expanded(
-                    child: Image.network(
-                      ApiConstants.resolveMediaUrl(item.iconUrl),
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Icon(
+                        style: const TextStyle(
+                          fontSize: _kHomeCategoryIconSize,
+                        ),
+                      )
+                    else if ((item.iconUrl ?? '').trim().isNotEmpty)
+                      Image.network(
+                        ApiConstants.resolveMediaUrl(item.iconUrl),
+                        height: _kHomeCategoryIconSize,
+                        width: _kHomeCategoryIconSize,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Icon(
+                          iconResolver(
+                            item.nameEn ?? item.name,
+                            categoryId: item.id,
+                          ),
+                          size: _kHomeCategoryIconSize,
+                        ),
+                      )
+                    else
+                      Icon(
                         iconResolver(
                           item.nameEn ?? item.name,
                           categoryId: item.id,
                         ),
-                        size: 28,
+                        size: _kHomeCategoryIconSize,
+                      ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.localizedName(activeLanguage),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: _kHomeBodyTextSize,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  )
-                else
-                  Expanded(
-                    child: Icon(
-                      iconResolver(
-                        item.nameEn ?? item.name,
-                        categoryId: item.id,
-                      ),
-                      size: 28,
-                    ),
-                  ),
-                const SizedBox(height: 4),
-                Text(
-                  item.localizedName(activeLanguage),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -2056,7 +2039,7 @@ class _QuickPickCard extends StatelessWidget {
                 style: const TextStyle(
                   color: Color(0xFF1D9855),
                   fontWeight: FontWeight.w700,
-                  fontSize: 10,
+                  fontSize: _kHomeCaptionTextSize,
                 ),
               ),
             ),
@@ -2067,9 +2050,14 @@ class _QuickPickCard extends StatelessWidget {
                     ? ((item.emoji ?? '').trim().isNotEmpty
                           ? Text(
                               item.emoji!,
-                              style: const TextStyle(fontSize: 42),
+                              style: const TextStyle(
+                                fontSize: _kHomeCategoryIconSize,
+                              ),
                             )
-                          : const Icon(Icons.eco_rounded, size: 42))
+                          : const Icon(
+                              Icons.eco_rounded,
+                              size: _kHomeCategoryIconSize,
+                            ))
                     : Image.network(
                         ApiConstants.resolveMediaUrl(item.imageUrl),
                         fit: BoxFit.contain,
@@ -2077,9 +2065,14 @@ class _QuickPickCard extends StatelessWidget {
                             ((item.emoji ?? '').trim().isNotEmpty
                             ? Text(
                                 item.emoji!,
-                                style: const TextStyle(fontSize: 42),
+                                style: const TextStyle(
+                                  fontSize: _kHomeCategoryIconSize,
+                                ),
                               )
-                            : const Icon(Icons.eco_rounded, size: 42)),
+                            : const Icon(
+                                Icons.eco_rounded,
+                                size: _kHomeCategoryIconSize,
+                              )),
                       ),
               ),
             ),
@@ -2087,12 +2080,18 @@ class _QuickPickCard extends StatelessWidget {
               item.localizedName(language),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: _kHomeBodyTextSize,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               item.localizedUnit(language) ?? '1 kg',
-              style: const TextStyle(color: Color(0xFF7C8399), fontSize: 12),
+              style: const TextStyle(
+                color: Color(0xFF7C8399),
+                fontSize: _kHomeSectionSubtitleSize,
+              ),
             ),
             const SizedBox(height: 6),
             Row(
@@ -2103,7 +2102,7 @@ class _QuickPickCard extends StatelessWidget {
                       : '₹--',
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
-                    fontSize: 18,
+                    fontSize: _kHomePriceTextSize,
                   ),
                 ),
                 const Spacer(),
@@ -2134,6 +2133,7 @@ class _QuickPickCard extends StatelessWidget {
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
+                          fontSize: _kHomeCaptionTextSize,
                         ),
                       ),
                     ),
@@ -2220,7 +2220,7 @@ class _ServiceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -2229,165 +2229,101 @@ class _ServiceTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 60,
-            height: 60,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: const Color(0xFFF0F2F8),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
             child: Text(
               (emoji ?? '').trim().isNotEmpty ? emoji!.trim() : '🏠',
-              style: const TextStyle(fontSize: 30),
+              style: const TextStyle(fontSize: _kHomeCategoryIconSize),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 17,
+                    fontSize: _kHomeBodyTextSize,
                     fontWeight: FontWeight.w700,
+                    height: 1.15,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '⭐ $rating',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF6A7289),
                     fontWeight: FontWeight.w600,
+                    fontSize: _kHomeCaptionTextSize,
                   ),
                 ),
                 Text(
                   '⏱ $eta',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF6A7289),
                     fontWeight: FontWeight.w500,
+                    fontSize: _kHomeCaptionTextSize,
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 4),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 86),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    price,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+              Text(
+                price,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: _kHomePriceTextSize,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               Text(
                 strikePrice,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Color(0xFF9BA1B5),
                   decoration: TextDecoration.lineThrough,
+                  fontSize: _kHomeCaptionTextSize,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFFE4F7E8),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   discount,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF1C9B49),
                     fontWeight: FontWeight.w800,
-                    fontSize: 11,
+                    fontSize: _kHomeCaptionTextSize,
                   ),
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CouponCard extends StatelessWidget {
-  const _CouponCard({
-    required this.accent,
-    required this.title,
-    required this.subtitle,
-    required this.code,
-    required this.tag,
-  });
-
-  final Color accent;
-  final String title;
-  final String subtitle;
-  final String code;
-  final String tag;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 136,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: accent,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              tag,
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF0F7A44),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              color: Color(0xFF6A7289),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1FA652),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              code,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
           ),
         ],
       ),
@@ -2466,7 +2402,7 @@ class _BottomNavItem extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: _kHomeCaptionTextSize,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                 color: selected
                     ? const Color(0xFFF44700)
