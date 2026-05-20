@@ -100,8 +100,14 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
         resolved: resolved,
         latitude: position.latitude,
         longitude: position.longitude,
+        showSuccessMessage: widget.openAsChangeLocation,
       );
       if (!didSetLocation || !mounted) {
+        return;
+      }
+
+      if (!widget.openAsChangeLocation) {
+        _navigateToHome(resolved.formattedAddress);
         return;
       }
 
@@ -205,6 +211,7 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
     required _ResolvedLocation resolved,
     required double latitude,
     required double longitude,
+    bool showSuccessMessage = true,
   }) async {
     final t = AppLocalizations.tr;
     final token = await AuthSessionService.instance.getToken();
@@ -258,15 +265,17 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
         return false;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            message?.isNotEmpty == true
-                ? message!
-                : 'Location set successfully',
+      if (showSuccessMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              message?.isNotEmpty == true
+                  ? message!
+                  : 'Location set successfully',
+            ),
           ),
-        ),
-      );
+        );
+      }
       return true;
     }
 
@@ -294,16 +303,9 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
     });
   }
 
-  void _confirmAndContinue() {
-    if (_resolvedLocation.isEmpty) {
-      return;
-    }
-
-    final destinationLabel = '${_tagTitle(_selectedTag)}: $_resolvedLocation';
-
-    if (widget.openAsChangeLocation) {
-      AuthSessionService.instance.saveDeliveryLocation(destinationLabel);
-      Navigator.of(context).pop(destinationLabel);
+  void _navigateToHome(String location) {
+    final destinationLabel = location.trim();
+    if (destinationLabel.isEmpty || !mounted) {
       return;
     }
 
@@ -320,8 +322,30 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
     );
   }
 
-  bool get _canConfirm =>
-      _hasResolvedLocation || _searchController.text.trim().isNotEmpty;
+  void _confirmAndContinue() {
+    if (_resolvedLocation.isEmpty) {
+      return;
+    }
+
+    final destinationLabel =
+        '${_tagTitle(_selectedTag)}: $_resolvedLocation';
+
+    AuthSessionService.instance.saveDeliveryLocation(destinationLabel);
+    Navigator.of(context).pop(destinationLabel);
+  }
+
+  bool get _showSaveAsOptions =>
+      widget.openAsChangeLocation && _hasResolvedLocation;
+
+  bool get _canConfirm {
+    if (_hasResolvedLocation) {
+      return true;
+    }
+    if (widget.openAsChangeLocation) {
+      return _searchController.text.trim().isNotEmpty;
+    }
+    return false;
+  }
 
   String _tagTitle(_AddressTag tag) {
     switch (tag) {
@@ -341,6 +365,17 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F8),
+      appBar: widget.openAsChangeLocation
+          ? AppBar(
+              backgroundColor: const Color(0xFFF6F7F8),
+              elevation: 0,
+              foregroundColor: const Color(0xFF0E1735),
+              title: const Text(
+                'Change location',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [
@@ -408,7 +443,7 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (!_hasResolvedLocation)
+                    if (!widget.openAsChangeLocation || !_hasResolvedLocation)
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.fromLTRB(24, 30, 24, 30),
@@ -443,7 +478,7 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
                           ],
                         ),
                       )
-                    else
+                    else if (widget.openAsChangeLocation)
                       _LocationFoundCard(location: _resolvedLocation),
                     const SizedBox(height: 24),
                     SizedBox(
@@ -477,13 +512,15 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
                                 ),
                               )
                             : Text(
-                                _hasResolvedLocation
+                                widget.openAsChangeLocation &&
+                                        _hasResolvedLocation
                                     ? '📍 Update Current Location'
                                     : '📍 Use My Current Location',
                               ),
                       ),
                     ),
-                    if (!_hasResolvedLocation) ...[
+                    if (widget.openAsChangeLocation &&
+                        !_hasResolvedLocation) ...[
                       const SizedBox(height: 16),
                       const Text(
                         'or',
@@ -543,7 +580,7 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
                       ),
                       const SizedBox(height: 20),
                     ],
-                    if (_hasResolvedLocation) ...[
+                    if (_showSaveAsOptions) ...[
                       const SizedBox(height: 14),
                       const Align(
                         alignment: Alignment.centerLeft,
@@ -581,8 +618,9 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
                         }),
                       ),
                     ],
-                    const SizedBox(height: 14),
-                    SizedBox(
+                    if (widget.openAsChangeLocation) ...[
+                      const SizedBox(height: 14),
+                      SizedBox(
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
@@ -610,6 +648,7 @@ class _PostOtpLocationScreenState extends State<PostOtpLocationScreen> {
                         child: const Text('Confirm & Continue →'),
                       ),
                     ),
+                    ],
                   ],
                 ),
               ),
