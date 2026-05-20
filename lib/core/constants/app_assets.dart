@@ -1,4 +1,4 @@
-/// Central paths for bundled image assets.
+/// Brand image paths used for launcher icon, splash, and in-app UI.
 class AppAssets {
   AppAssets._();
 

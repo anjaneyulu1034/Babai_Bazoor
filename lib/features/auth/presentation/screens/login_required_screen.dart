@@ -1,4 +1,5 @@
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
+import 'package:babai_bazor_app/core/widgets/app_brand_logo.dart';
 import 'package:babai_bazor_app/features/auth/presentation/screens/mobile_login_screen.dart';
 import 'package:flutter/material.dart';
 
@@ -38,10 +39,10 @@ class LoginRequiredScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.lock_outline_rounded,
-                  size: 42,
-                  color: Color(0xFF4B5563),
+                const AppBrandLogo(
+                  width: 72,
+                  height: 72,
+                  borderRadius: 16,
                 ),
                 const SizedBox(height: 12),
                 const Text(

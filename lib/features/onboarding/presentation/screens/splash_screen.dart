@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:babai_bazor_app/core/constants/api_constants.dart';
 import 'package:babai_bazor_app/core/constants/app_colors.dart';
-import 'package:babai_bazor_app/core/constants/app_assets.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
+import 'package:babai_bazor_app/core/widgets/app_brand_logo.dart';
 import 'package:babai_bazor_app/core/services/auth_session_service.dart';
 import 'package:babai_bazor_app/features/auth/presentation/screens/mobile_login_screen.dart';
 import 'package:babai_bazor_app/features/home/presentation/screens/home_screen.dart';
@@ -140,6 +140,7 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     final t = AppLocalizations.tr;
     final screenWidth = MediaQuery.sizeOf(context).width;
+    final brandFont = (screenWidth * 0.145).clamp(46.0, 58.0);
     final slideTitleFont = (screenWidth * 0.098).clamp(42.0, 54.0);
 
     return Scaffold(
@@ -167,13 +168,36 @@ class _SplashScreenState extends State<SplashScreen> {
               padding: const EdgeInsets.fromLTRB(28, 14, 28, 18),
               child: Column(
                 children: [
-                  Image.asset(
-                    AppAssets.logo,
-                    width: 220,
-                    height: 120,
-                    fit: BoxFit.contain,
+                  const AppBrandLogo(width: 120, height: 120),
+                  const SizedBox(height: 16),
+                  RichText(
+                    textAlign: TextAlign.center,
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Babai\n',
+                          style: TextStyle(
+                            color: Color(0xFFF8EFE6),
+                            fontSize: brandFont,
+                            fontWeight: FontWeight.w800,
+                            height: 0.92,
+                            fontFamily: 'serif',
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'Bazaar',
+                          style: TextStyle(
+                            color: Color(0xFFFFBE0A),
+                            fontSize: brandFont,
+                            fontWeight: FontWeight.w800,
+                            height: 0.92,
+                            fontFamily: 'serif',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   Text(
                     t(widget.language, 'tagline'),
                     textAlign: TextAlign.center,
