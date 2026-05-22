@@ -1,4 +1,3 @@
-import 'package:babai_bazor_app/core/constants/app_assets.dart';
 import 'package:babai_bazor_app/core/localization/app_localizations.dart';
 import 'package:babai_bazor_app/features/auth/presentation/screens/mobile_login_screen.dart';
 import 'package:flutter/material.dart';
@@ -97,13 +96,6 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen> {
                   child: Column(
                     children: [
                       const SizedBox(height: 12),
-                      Image.asset(
-                        AppAssets.logo,
-                        width: 200,
-                        height: 100,
-                        fit: BoxFit.contain,
-                      ),
-                      const SizedBox(height: 20),
                       const Text(
                         'Choose Language',
                         textAlign: TextAlign.center,
